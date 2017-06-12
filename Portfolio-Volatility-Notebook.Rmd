@@ -1,0 +1,235 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, message = FALSE}
+library(quantmod)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(xts)
+library(tidyquant)
+library(purrr)
+```
+
+```{r}
+
+symbols <- c("SPY","IJS","EFA","EEM","IEF")
+
+prices <- 
+  getSymbols(symbols, src = 'google', from = "2017-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+
+# generate daily return series for funds
+returns <-na.omit(ROC(prices, 1, "continuous"))
+
+# portfolio weights
+w = c(0.25, 0.20, 0.15, 0.15, 0.25)
+
+# portfolio standard deviation
+# transpose of the weights cross prod covariance matrix returns cross prod weights
+port_vol <- sqrt(t(w) %*% cov(returns) %*% w)
+
+# marginal contribution to risk
+marginal_contr_vol <- w %*% cov(returns) / port_vol[1,1]
+
+# component contribution to risk 
+contrib_risk <- marginal_contr_vol * w 
+
+contrib_risk_perc <- contrib_risk / port_vol[1,1]
+
+results <- data_frame(symbols, w, as.vector(marginal_contr_vol), 
+                      as.vector(contrib_risk), as.vector(contrib_risk_perc))
+
+colnames(results) <- c("Tickers", "Weights", "Marginal", "Component", "Component Percentage")
+
+# vector of 1 + n 
+# function that takes a number as a start date
+# try a for loop first, see how long it takes
+# map might be too complicated here
+index(returns)[1:100]
+```
+
+```{r}
+
+returns_df <- returns %>% 
+  as_tibble(preserve_row_names = TRUE) %>% 
+  mutate(date = ymd(row.names)) %>% 
+  select(-row.names) %>% 
+  select(date, everything())
+
+returns_xts <- returns_df %>% 
+  as_xts(date_col = date)
+
+returns_xts <- as.xts(returns_xts)
+
+# calculate risk contribution to portfolio with function from PortfolioAnalytics package
+
+my_interval_sd <- function(returns_df, start_date = returns_df$date[1], window = nrow(returns_df) - which(returns_df$date == start_date)){
+  
+  start_date_index = which(returns_df$date == start_date)
+
+  end_date = returns_df$date[c(start_date_index + window)]
+  
+  w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
+  
+  nums_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  returns_xts <- nums_to_use %>% as_xts(date_col = date) 
+  
+  results <- StdDev(returns_xts, weights = w, portfolio_method = "component")
+  
+  results <- as_tibble(t(results$pct_contrib_StdDev)) %>% 
+    mutate(date = end_date) %>% 
+    select(date, everything())
+}
+
+
+rolling_sd_test <- my_interval_sd(returns_df, "2017-01-17")
+
+
+
+df <- data.frame(numbers = c(1:1000))
+mean_of_100 <- function(start, data = df) {
+  nums_to_use <- data$numbers[c(start, start + 99)]
+  tibble(start = start,
+             mean = mean(nums_to_use, na.rm = TRUE))
+}
+library(purrr)
+test <- map_df(1:1000, mean_of_100)
+  w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
+rolling_contribution <- function(x, w, window = 100){
+  # this function will start at 1
+  x.subset <- index(x)[1:window]
+  # portfolio weights
+  
+  #returns_chopped <- x[x.subset] %>% as_tibble()
+  
+  StdDev(x[x.subset], weights = w, portfolio_method = "component")
+}
+returns_df <- returns %>% 
+  as_tibble(preserve_row_names = TRUE) %>% 
+  rename(date = row.names)
+returns_df$date <- ymd(returns_df$date)
+  
+returns_xts <- returns_df %>% as_xts(date_col = date)
+
+
+
+results <- StdDev(returns_xts, weights = w, portfolio_method = "component") 
+test <- std_dev_xts_to_df(returns)
+results <- StdDev(returns, weights = w, portfolio_method = "component") %>% 
+  as_tibble(t(results$pct_contrib_StdDev)) 
+
+  rename(date = row.names) %>% 
+  mutate( date = ymd(conver_test$date))  
+
+
+joined_data1 <- joined_data %>% 
+  tq_transmute(mutate_fun = rollapply,
+              width      = 20,
+              FUN        = std_dev_xts_to_df,
+              by.column  = TRUE
+              #col_rename = c("alpha", "beta")
+              )
+returns_xts <- std_dev_xts_to_df(joined_data)
+my_std_dev(returns)
+rollapply(returns, width = 10, FUN = my_std_dev)
+# confirmed, rollapply screws up the weights vector
+# let's turn to map
+results <- StdDev(returns, weights = w, portfolio_method = "component")
+w = c(0.25, 0.20, 0.15, 0.15, 0.25)
+my_std_dev <- function(x){
+  w = c(0.25, 0.20, 0.15, 0.15, 0.25)
+  StdDev(x, weights = w, portfolio_method = "component")
+}
+test1 <- my_std_dev(returns)
+testing <- rollapply(returns, width = 50, my_std_dev)
+install.packages("roll")
+library(purrr)
+another <- roll_sd(returns, 50, weights = w, complete_obs = FALSE)
+```
+
+```{r}
+from_scratch <- function(returns_df){
+  # Start at observation one.
+  # Go to observation one + window
+  # using the weights, calculate component standard deviation
+  # save in a data frame with components as column names
+
+  # this function will start at 1
+  #x.subset <- index(x)[1:window]
+  # portfolio weights
+  returns_xts <- as_xts(returns_df, date_col = date) 
+  w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
+  #returns_chopped <- x[x.subset] %>% as_tibble()
+  
+  results <- StdDev(returns_xts, weights = w, portfolio_method = "component") 
+  results <- as_tibble(t(results$pct_contrib_StdDev))
+}
+```
+
+
+```{r}
+
+#port.VaR <- VaR(returns, weights = w, portfolio_method = "component")
+
+test_df <- data_frame(names(port.sd$contribution)) %>% mutate(contribution = port.sd$contribution, perct_contr = port.sd$pct_contrib_StdDev)
+
+colnames(test_df)[1] <- "asset"
+
+per_an <- ggplot(test_df, aes(asset, contribution)) +
+  geom_col(fill = 'blue', colour = 'red')+ scale_y_continuous(labels = percent)
+
+library(scales)
+
+by_hand <-ggplot(results, aes(Tickers, Component)) +
+  geom_col(fill = 'blue', colour = 'red') + scale_y_continuous(labels = percent)
+per_an
+by_hand
+```
+
+
+```{r Find Min Variance Portfolio}
+symbols_min <- c("SPY","IJS","EFA", "FB")
+prices_min <- 
+  getSymbols(symbols_min, src = 'google', from = "2017-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols_min)
+
+# generate daily return series for funds
+returns_min <- na.omit(ROC(prices_min, 1, "continuous"))
+
+ mu_returns <- colMeans(returns_min)
+ 
+ covriance_matrix_min <- cov(returns_min)
+ 
+ top_matrix_min <- bind_cols(2*covriance_matrix_min, rep(1, 4))
+ 
+ bot_vector_min <- c(rep(1, 4), 0)
+ 
+ Am_mat_min <- bind_rows(top_matrix_min, bot_vector_min)
+ 
+ b_vec_min <- c(rep(0, 4), 1)
+ 
+ z_m_mat_min <- solve(Am_mat_min) %*% b_vec_min
+ 
+ m_vec_min <- z_m_mat_min[1:4,1]
+ m_vec_min
+ mu_min_port <- as.numeric(crossprod(m_vec_min, mu_returns))
+
+# portfolio variance
+min_port_var <- as.numeric(t(m_vec_min) %*% covriance_matrix_min %*% m_vec_min)
+
+```
+
+
+
+
+
+
