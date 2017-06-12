@@ -31,29 +31,44 @@ w = c(0.25, 0.20, 0.15, 0.15, 0.25)
 
 # portfolio standard deviation
 # transpose of the weights cross prod covariance matrix returns cross prod weights
-port_vol <- sqrt(t(w) %*% cov(returns) %*% w)
+portfolio_sd <- sqrt(t(w) %*% cov(returns) %*% w)
 
-# marginal contribution to risk
-marginal_contr_vol <- w %*% cov(returns) / port_vol[1,1]
+# marginal contribution to portfolio standard deviation.
+marginal_contr_portfolio_sd <- w %*% cov(returns) / portfolio_sd[1,1]
 
 # component contribution to risk 
-contrib_risk <- marginal_contr_vol * w 
+component_risk_contribution <- marginal_contr_portfolio_sd * w 
 
-contrib_risk_perc <- contrib_risk / port_vol[1,1]
+component_risk_percentage <- component_risk_contribution / portfolio_sd[1,1]
 
-results <- data_frame(symbols, w, as.vector(marginal_contr_vol), 
-                      as.vector(contrib_risk), as.vector(contrib_risk_perc))
+results <- tibble(symbols, w, as.vector(component_risk_percentage)) %>% 
+  rename(weights = w, `risk contribution` = `as.vector(component_risk_percentage)`)
 
-colnames(results) <- c("Tickers", "Weights", "Marginal", "Component", "Component Percentage")
 
-# vector of 1 + n 
-# function that takes a number as a start date
-# try a for loop first, see how long it takes
-# map might be too complicated here
-index(returns)[1:100]
 ```
 
 ```{r}
+# Confirm portfolio volatility
+portfolio_sd_confirm <- StdDev(returns, weights = w)
+
+# Confirm component contribution to volality.
+component_sd_confirm <- StdDev(returns, weights = w, portfolio_method = "component")
+
+# Returns a list, which isn't ideal for presenting. 
+str(component_sd_confirm)
+
+# Let's port to a tibble. I am going to transpose because I want them to be in 
+# wide format. That will be important when we want to chart later on - we'll get there! 
+sd_to_tibble <- as_tibble(t(sd_via_PerfAn$pct_contrib_StdDev)) %>% 
+    mutate(date = index(returns)[nrow(returns)]) %>% 
+    select(date, everything())
+```
+
+
+```{r}
+# Before we get to substance, let's practice toggling between a tibble and an xts. 
+# Why? The more this is done, easier it will be to think through the tool kit for
+# time series. 
 
 returns_df <- returns %>% 
   as_tibble(preserve_row_names = TRUE) %>% 
@@ -61,96 +76,70 @@ returns_df <- returns %>%
   select(-row.names) %>% 
   select(date, everything())
 
+# Another benefit, I can expiremtn with returns_xts without corrupting my
+# original data object `returns`.
 returns_xts <- returns_df %>% 
   as_xts(date_col = date)
 
-returns_xts <- as.xts(returns_xts)
 
 # calculate risk contribution to portfolio with function from PortfolioAnalytics package
 
-my_interval_sd <- function(returns_df, start_date = returns_df$date[1], window = nrow(returns_df) - which(returns_df$date == start_date)){
+my_interval_sd <- function(returns_df, start = 1, window = 20){
   
-  start_date_index = which(returns_df$date == start_date)
-
-  end_date = returns_df$date[c(start_date_index + window)]
+  # First create start date
+  start_date = returns_df$date[start]
   
+  # Next an end date
+  end_date = returns_df$date[c(start + window)]
+  
+  # Filter on start and end date
+  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  # Convert to xts so can use built in Performance Analytics function.
+  returns_xts <- interval_to_use %>% as_xts(date_col = date) 
+  
+  # Portfolio weights.
   w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
   
-  nums_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  # Pass xts object to function.
+  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "component")
   
-  returns_xts <- nums_to_use %>% as_xts(date_col = date) 
-  
-  results <- StdDev(returns_xts, weights = w, portfolio_method = "component")
-  
-  results <- as_tibble(t(results$pct_contrib_StdDev)) %>% 
-    mutate(date = end_date) %>% 
-    select(date, everything())
+  # Convert results to tibble.
+  results_to_tibble <- as_tibble(t(results_as_xts$pct_contrib_StdDev)) %>% 
+    mutate(`end date` = end_date) %>% 
+    select(`end date`, everything()) 
 }
 
 
-rolling_sd_test <- my_interval_sd(returns_df, "2017-01-17")
+rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20)
+rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20)
+rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20)
+rolling_sd_test4 <- my_interval_sd(returns_df, 4, 20)
+rolling_sd_test5 <- my_interval_sd(returns_df, 5, 20)
+
+bound <- bind_rows(rolling_sd_test1, rolling_sd_test2, rolling_sd_test3, rolling_sd_test4, rolling_sd_test5)
+
+bound
+
+# Applications: subset. rolling. subset by spikes, perhaps whenever x asset went above this threshold for risk contribution. chart the time series. 
 
 
+rolling_contribution <- function(returns_xts, window = 100){
 
-df <- data.frame(numbers = c(1:1000))
-mean_of_100 <- function(start, data = df) {
-  nums_to_use <- data$numbers[c(start, start + 99)]
-  tibble(start = start,
-             mean = mean(nums_to_use, na.rm = TRUE))
-}
-library(purrr)
-test <- map_df(1:1000, mean_of_100)
+  rolling_window <- window
+  
   w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
-rolling_contribution <- function(x, w, window = 100){
-  # this function will start at 1
-  x.subset <- index(x)[1:window]
-  # portfolio weights
+
+  xts_window <- returns_xts[index(returns_xts)[1:rolling_window]] %>% 
+    StdDev(., weights = w, portfolio_method = "component")  
   
-  #returns_chopped <- x[x.subset] %>% as_tibble()
-  
-  StdDev(x[x.subset], weights = w, portfolio_method = "component")
+  xts_to_tibble <-  as_tibble(t(xts_window$pct_contrib_StdDev)) %>% 
+    mutate(`end date` = index(returns_xts)[rolling_window]) %>% 
+    select(`end date`, everything())
 }
-returns_df <- returns %>% 
-  as_tibble(preserve_row_names = TRUE) %>% 
-  rename(date = row.names)
-returns_df$date <- ymd(returns_df$date)
-  
-returns_xts <- returns_df %>% as_xts(date_col = date)
 
 
 
-results <- StdDev(returns_xts, weights = w, portfolio_method = "component") 
-test <- std_dev_xts_to_df(returns)
-results <- StdDev(returns, weights = w, portfolio_method = "component") %>% 
-  as_tibble(t(results$pct_contrib_StdDev)) 
-
-  rename(date = row.names) %>% 
-  mutate( date = ymd(conver_test$date))  
-
-
-joined_data1 <- joined_data %>% 
-  tq_transmute(mutate_fun = rollapply,
-              width      = 20,
-              FUN        = std_dev_xts_to_df,
-              by.column  = TRUE
-              #col_rename = c("alpha", "beta")
-              )
-returns_xts <- std_dev_xts_to_df(joined_data)
-my_std_dev(returns)
-rollapply(returns, width = 10, FUN = my_std_dev)
-# confirmed, rollapply screws up the weights vector
-# let's turn to map
-results <- StdDev(returns, weights = w, portfolio_method = "component")
-w = c(0.25, 0.20, 0.15, 0.15, 0.25)
-my_std_dev <- function(x){
-  w = c(0.25, 0.20, 0.15, 0.15, 0.25)
-  StdDev(x, weights = w, portfolio_method = "component")
-}
-test1 <- my_std_dev(returns)
-testing <- rollapply(returns, width = 50, my_std_dev)
-install.packages("roll")
-library(purrr)
-another <- roll_sd(returns, 50, weights = w, complete_obs = FALSE)
 ```
 
 ```{r}
