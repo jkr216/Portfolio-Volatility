@@ -1,0 +1,53 @@
+---
+title: "Min Var Portfolio"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+library(quantmod)
+```
+
+```{r Find Min Variance Portfolio}
+symbols_min <- c("SPY","IJS","EFA", "FB")
+
+prices_min <- 
+  getSymbols(symbols_min, src = 'google', from = "2017-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols_min)
+
+# generate daily return series for funds
+returns_min <- na.omit(ROC(prices_min, 1, "continuous"))
+
+ mu_returns <- colMeans(returns_min)
+ 
+ covriance_matrix_min <- cov(returns_min)
+ 
+ top_matrix_min <- bind_cols(2*covriance_matrix_min, rep(1, 4))
+ 
+ bot_vector_min <- c(rep(1, 4), 0)
+ 
+ Am_mat_min <- bind_rows(top_matrix_min, bot_vector_min)
+ 
+ b_vec_min <- c(rep(0, 4), 1)
+ 
+ z_m_mat_min <- solve(Am_mat_min) %*% b_vec_min
+ 
+ m_vec_min <- z_m_mat_min[1:4,1]
+ m_vec_min
+ mu_min_port <- as.numeric(crossprod(m_vec_min, mu_returns))
+
+# portfolio variance
+min_port_var <- as.numeric(t(m_vec_min) %*% covriance_matrix_min %*% m_vec_min)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).

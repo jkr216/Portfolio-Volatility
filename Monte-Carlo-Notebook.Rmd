@@ -1,0 +1,223 @@
+---
+title: "Monte Carlo Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*.
+
+```{r setup}
+library(quantmod)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(xts)
+library(tidyquant)
+```
+
+
+```{r get stock prices function}
+get_stock_prices <- function(ticker, return_format = "tibble", ...) {
+    # Get stock prices
+    stock_prices_xts <- getSymbols(ticker, src = 'google', from = "2017-01-01", 
+             auto.assign = FALSE, warnings = FALSE) %>%  
+     # Rename
+    `colnames<-`(c("Open", "High", "Low", "Close", "Volume"))
+    # Return in xts format if tibble is not specified
+    if (return_format == "tibble") {
+        stock_prices <- stock_prices_xts %>%
+            as_tibble(preserve_row_names = TRUE) %>% 
+            rename(date = row.names) %>% 
+          mutate(date = ymd(date))
+    } else {
+        stock_prices <- stock_prices_xts
+    }
+    stock_prices
+}
+"AMZN" %>% get_stock_prices(return_format = "tibble")
+```
+
+```{r}
+get_prices <- function(ticker, ...) {
+
+stock_prices <- getSymbols(ticker, src = 'google', from = "2017-01-01", 
+                           auto.assign = FALSE, warnings = FALSE) %>% 
+  `colnames<-`(c("Open", "High", "Low", "Close", "Volume")) %>% 
+  as_tibble(preserve_row_names = TRUE) %>% 
+  rename(date = row.names) %>% 
+  mutate(date = ymd(date))
+
+}
+Amazon <- "AMZN" %>% get_prices()
+```
+
+
+```{r get log returns function}
+get_log_returns <- function(x, period = 'daily', ...) {
+# Convert tibble to xts
+if (!is.xts(x)) {
+  x <- xts(x[,-1], order.by = x$date)
+}
+
+# Get log returns
+log_returns <- periodReturn(x = x$Close, type = 'log', period = period, ...) %>% 
+  `colnames<-`("Log.Returns") %>% 
+  as_tibble(preserve_row_names = TRUE) %>% 
+  rename(date = row.names) %>% 
+  mutate(date = ymd(date))
+
+}
+```
+
+```{r}
+amazon_test <- "AMZN" %>% 
+    get_prices() %>% 
+    get_log_returns() 
+
+```
+
+
+```{r sp top 3 prices, message = FALSE}
+sp500 <- tq_index("SP500", use_fallback = TRUE) %>% slice(10:20)
+
+sp_500 <- sp500 %>%
+    mutate(
+        stock.prices = map(symbol, 
+                              function(.x) get_prices(.x, from = "2017-01-01", to = "2017-03-01")),
+        log.returns  = map(stock.prices, 
+                              function(.x) get_log_returns(.x)),
+        mean.log.returns = map_dbl(log.returns, ~ mean(.$Log.Returns)),
+        sd.log.returns   = map_dbl(log.returns, ~ sd(.$Log.Returns)),
+        n.trade.days = map_dbl(stock.prices, nrow)
+        )  
+
+```
+
+
+```{r}
+
+# Plot the log-returns    
+amazon_test %>%    
+    ggplot(aes(x = Log.Returns)) + 
+    geom_histogram(bins = 100) + 
+    geom_density() +
+    geom_rug(alpha = 0.5) 
+```
+
+
+```{r}
+probs <- c(.005, .025, .25, .5, .75, .975, .995)
+dist_log_returns <- amazon_test$Log.Returns %>% 
+    quantile(probs = probs, na.rm = TRUE)
+dist_log_returns
+```
+
+```{r}
+mean_log_returns <- mean(amazon_test$Log.Returns, na.rm = TRUE)
+sd_log_returns <- sd(amazon_test$Log.Returns, na.rm = TRUE)
+```
+
+```{r}
+# Parameters
+N     <- 252 # Number of Stock Price Simulations = about number of trading days in year
+M     <- 10  # Number of Monte Carlo Simulations   
+mu    <- mean_log_returns
+sigma <- sd_log_returns
+day <- 1:N
+price_init <- tail(Amazon$Close, n=1)
+# Simulate prices
+set.seed(123)
+monte_carlo_mat <- matrix(nrow = N, ncol = M)
+for (j in 1:M) {
+    monte_carlo_mat[[1, j]] <- price_init
+    for(i in 2:N) {
+        monte_carlo_mat[[i, j]] <- monte_carlo_mat[[i - 1, j]] * exp(rnorm(1, mu, sigma))
+    }
+}
+```
+
+```{r}
+library(stringr)
+# Format and organize data frame
+nm <- str_c("Sim.", seq(1, M))
+nm <- c("Day", nm)
+price_sim <- cbind(day, monte_carlo_mat) %>%
+  as_tibble() %>%
+  `colnames<-`(nm) %>% 
+  rowwise() %>% 
+  mutate_(sim.median = median(nm))
+
+price_sim_gathered <- price_sim %>%
+    gather(key = "Simulation", value = "Stock.Price", -(Day))
+
+```
+
+```{r}
+median_test <- tail(price_sim$sim.median, n = 1)
+# Visualize simulation
+price_sim_gathered %>%
+    ggplot(aes(x = Day, y = Stock.Price, Group = Simulation)) + 
+    geom_line(alpha = 0.25, colour = "blue") +
+    geom_hline(yintercept = median_test, colour = "red", alpha = 0.2) +
+    ggtitle(str_c("Amazon: ", M, 
+                  " Monte Carlo Simulations for Prices Over ", N, 
+                  " Trading Days"))
+```
+
+
+```{r log returns}
+sp500_simulate <- sp500_top3 %>% 
+  mutate(log.returns  = map(prices, function(.x) 
+    get_log_returns(.x, return_format = "tibble")),
+    mean.log.returns = map_dbl(log.returns, ~ mean(.$Log.Returns)),
+    sd.log.returns   = map_dbl(log.returns, ~ sd(.$Log.Returns)),
+    n.trade.days = map_dbl(stock.prices, nrow))
+```
+
+## first steps:
+
+# get mean log return 
+# get standard deviation of log return
+# get initial price
+# set number of days for the simulation
+# set number of simulations to run
+
+```{r}
+# Parameters
+N     <- 252 # Number of Stock Price Simulations = about number of trading days in year
+M     <- 10  # Number of Monte Carlo Simulations   
+mu    <- mean_log_returns
+sigma <- sd_log_returns
+day <- 1:N
+price_init <- tail(Amazon$Close, n=1)
+```
+
+```{r run simulation using parameters}
+# Simulate prices
+set.seed(123)
+monte_carlo_mat <- matrix(nrow = N, ncol = M)
+for (j in 1:M) {
+    monte_carlo_mat[[1, j]] <- price_init
+    for(i in 2:N) {
+        monte_carlo_mat[[i, j]] <- monte_carlo_mat[[i - 1, j]] * exp(rnorm(1, mu, sigma))
+    }
+}
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+```{r}
+library(stringr)
+# Format and organize data frame
+nm <- str_c("Sim.", seq(1, M))
+nm <- c("Day", nm)
+price_sim <- cbind(day, monte_carlo_mat) %>%
+  as_tibble() %>%
+  `colnames<-`(nm) %>% 
+  rowwise() %>% 
+  mutate_(sim.median = median(nm))
+library(broom)
+price_sim_gathered <- price_sim %>%
+    gather(key = "Simulation", value = "Stock.Price", -(Day))
+```

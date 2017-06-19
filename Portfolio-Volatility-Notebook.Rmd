@@ -29,9 +29,13 @@ returns <-na.omit(ROC(prices, 1, "continuous"))
 # portfolio weights
 w = c(0.25, 0.20, 0.15, 0.15, 0.25)
 
+# Build covariance matrix
+cov_matrix <- cov(returns)
+
+
 # portfolio standard deviation
 # transpose of the weights cross prod covariance matrix returns cross prod weights
-portfolio_sd <- sqrt(t(w) %*% cov(returns) %*% w)
+portfolio_sd <- sqrt(t(w) %*% cov_matrix %*% w)
 
 # marginal contribution to portfolio standard deviation.
 marginal_contr_portfolio_sd <- w %*% cov(returns) / portfolio_sd[1,1]
@@ -39,6 +43,7 @@ marginal_contr_portfolio_sd <- w %*% cov(returns) / portfolio_sd[1,1]
 # component contribution to risk 
 component_risk_contribution <- marginal_contr_portfolio_sd * w 
 
+# To get the percentage contribution, divide component contribution by total sd.
 component_risk_percentage <- component_risk_contribution / portfolio_sd[1,1]
 
 results <- tibble(symbols, w, as.vector(component_risk_percentage)) %>% 
@@ -76,12 +81,13 @@ returns_df <- returns %>%
   select(-row.names) %>% 
   select(date, everything())
 
-# Another benefit, I can expiremtn with returns_xts without corrupting my
+# Another benefit, I can expirement with returns_xts without corrupting my
 # original data object `returns`.
 returns_xts <- returns_df %>% 
   as_xts(date_col = date)
+```
 
-
+```{r SD Interval Function, message = FALSE}
 # calculate risk contribution to portfolio with function from PortfolioAnalytics package
 
 my_interval_sd <- function(returns_df, start = 1, window = 20){
@@ -106,11 +112,12 @@ my_interval_sd <- function(returns_df, start = 1, window = 20){
   
   # Convert results to tibble.
   results_to_tibble <- as_tibble(t(results_as_xts$pct_contrib_StdDev)) %>% 
-    mutate(`end date` = end_date) %>% 
-    select(`end date`, everything()) 
+    mutate(date = ymd(end_date)) %>% 
+    select(date, everything()) 
 }
+```
 
-
+```{r Use the function, message = FALSE}
 rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20)
 rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20)
 rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20)
@@ -119,11 +126,47 @@ rolling_sd_test5 <- my_interval_sd(returns_df, 5, 20)
 
 bound <- bind_rows(rolling_sd_test1, rolling_sd_test2, rolling_sd_test3, rolling_sd_test4, rolling_sd_test5)
 
-bound
+window <- 20
 
-# Applications: subset. rolling. subset by spikes, perhaps whenever x asset went above this threshold for risk contribution. chart the time series. 
+test <- map_df(1:(nrow(returns_df)-window), my_interval_sd, 
+               returns_df = returns_df, window = window) %>% 
+  mutate(date = ymd(date)) %>% 
+  select(date, everything()) %>% 
+  as_xts(date_col = date)
+
+```
 
 
+```{r, message = FALSE}
+library(highcharter)
+
+ vis <- highchart(type = "stock") %>% 
+   hc_title(text = "Volatility Contribution") %>%
+   hc_add_series(test$SPY, name = "SPY Risk Comp") %>%
+   hc_add_series(test$IJS, name = "IJS Risk Comp") %>%
+   hc_add_series(test$EFA, name = "EFA Risk Comp" )%>%
+   hc_add_series(test$IEF, name = "IEF Risk Comp") %>%
+   hc_add_series(test$EEM, name = "EEM Risk Comp") %>%
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+ vis
+```
+
+
+Applications: 
+-subset. 
+-rolling. 
+-subset by spikes, perhaps whenever x asset went above this threshold for risk contribution.
+-label any cross overs
+-try to explain when a certain goes above the thresh
+-calculate portfolio that puts to parity at time x
+-chart the time series. 
+
+
+
+```{r}
 rolling_contribution <- function(returns_xts, window = 100){
 
   rolling_window <- window
@@ -138,31 +181,10 @@ rolling_contribution <- function(returns_xts, window = 100){
     select(`end date`, everything())
 }
 
-
-
-```
-
-```{r}
-from_scratch <- function(returns_df){
-  # Start at observation one.
-  # Go to observation one + window
-  # using the weights, calculate component standard deviation
-  # save in a data frame with components as column names
-
-  # this function will start at 1
-  #x.subset <- index(x)[1:window]
-  # portfolio weights
-  returns_xts <- as_xts(returns_df, date_col = date) 
-  w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
-  #returns_chopped <- x[x.subset] %>% as_tibble()
-  
-  results <- StdDev(returns_xts, weights = w, portfolio_method = "component") 
-  results <- as_tibble(t(results$pct_contrib_StdDev))
-}
 ```
 
 
-```{r}
+```{r visualize volatility}
 
 #port.VaR <- VaR(returns, weights = w, portfolio_method = "component")
 
@@ -181,41 +203,6 @@ per_an
 by_hand
 ```
 
-
-```{r Find Min Variance Portfolio}
-symbols_min <- c("SPY","IJS","EFA", "FB")
-prices_min <- 
-  getSymbols(symbols_min, src = 'google', from = "2017-01-01", 
-             auto.assign = TRUE, warnings = FALSE) %>% 
-  map(~Cl(get(.))) %>% 
-  reduce(merge) %>%
-  `colnames<-`(symbols_min)
-
-# generate daily return series for funds
-returns_min <- na.omit(ROC(prices_min, 1, "continuous"))
-
- mu_returns <- colMeans(returns_min)
- 
- covriance_matrix_min <- cov(returns_min)
- 
- top_matrix_min <- bind_cols(2*covriance_matrix_min, rep(1, 4))
- 
- bot_vector_min <- c(rep(1, 4), 0)
- 
- Am_mat_min <- bind_rows(top_matrix_min, bot_vector_min)
- 
- b_vec_min <- c(rep(0, 4), 1)
- 
- z_m_mat_min <- solve(Am_mat_min) %*% b_vec_min
- 
- m_vec_min <- z_m_mat_min[1:4,1]
- m_vec_min
- mu_min_port <- as.numeric(crossprod(m_vec_min, mu_returns))
-
-# portfolio variance
-min_port_var <- as.numeric(t(m_vec_min) %*% covriance_matrix_min %*% m_vec_min)
-
-```
 
 
 

@@ -1,0 +1,205 @@
+---
+title: "Portfolio Volatility App"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(quantmod)
+library(tidyverse)
+library(PerformanceAnalytics)
+library(xts)
+library(tidyquant)
+library(DT)
+library(data.table)
+library(highcharter)
+
+# functions to be used downstream
+
+componentReturns_df <- function(stock1, stock2, stock3, start_date = "2017-01-01"){
+  
+  symbols <- c(stock1, stock2, stock3)
+  
+  prices <- 
+  getSymbols(symbols, src = 'google', from = start_date, 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+
+  # generate daily return series for funds
+  returns <-na.omit(ROC(prices, 1, "continuous"))
+  
+  returns_df <- returns %>% 
+  as_tibble(preserve_row_names = TRUE) %>% 
+  mutate(date = ymd(row.names)) %>% 
+  select(-row.names) %>% 
+  select(date, everything())
+}
+
+my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
+  
+  # First create start date
+  start_date = returns_df$date[start]
+  
+  # Next an end date
+  end_date = returns_df$date[c(start + window)]
+  
+  # Filter on start and end date
+  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  # Convert to xts so can use built in Performance Analytics function.
+  returns_xts <- interval_to_use %>% as_xts(date_col = date) 
+  
+  # Portfolio weights.
+  w <- weights
+  
+  # Pass xts object to function.
+  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "component")
+  
+  # Convert results to tibble.
+  results_to_tibble <- as_tibble(t(results_as_xts$pct_contrib_StdDev)) %>% 
+    mutate(date = ymd(end_date)) %>% 
+    select(date, everything()) 
+}
+```
+
+```{r, eval = FALSE}
+# Shiny app that lets user: 
+# build a portfolio by choosing assets and weights; 
+# choose a time period
+# import and calculate prices and returns on some period like monthly
+# calculate portfolio standard devation
+# calculate contribution of each component to sd over that time period
+# chart the contribution
+# Advanced applications
+
+```
+
+Page 1
+===========================================
+
+Sidebar {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+helpText("Choose assets and weights.")
+
+fluidRow(
+  column(7,
+  textInput("stock1", "Stock 1", "GOOG")),
+  column(5,
+  numericInput("w1", "Portf. %", 25, min = 1, max = 100))
+)  
+
+fluidRow(
+  column(7,
+  textInput("stock2", "Stock 2", "FB")),
+  column(5,
+  numericInput("w2", "Portf. %", 25, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  textInput("stock3", "Stock 3", "AMZN")),
+  column(5,
+  numericInput("w3", "Portf. %", 50, min = 1, max = 100))
+)
+
+fluidRow(
+  column(7,
+  dateInput("start_date", "Start Date", value = "2017-01-01")),
+  column(5,
+  numericInput("window", "Window", 10, min = 5, max = 50, step = 5))
+)
+
+```
+
+```{r}
+returns_df <- reactive({
+  componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date)
+})
+
+portfolio_vol_components <- reactive({
+  returns_df <- as.data.frame(returns_df()) %>% mutate(date = ymd(date))
+  weights <- c(input$w1, input$w2, input$w3)
+  
+  port_components <- map_df(1:(nrow(returns_df)-input$window), my_interval_sd,
+                            returns_df = returns_df, weights = weights, window = input$window) %>% 
+    mutate(date = ymd(date)) %>%
+    select(date, everything()) %>%
+    as_xts(date_col = date)
+  # an xts comes out of this
+})
+```
+
+
+
+Column
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+
+renderHighchart({
+
+  # The output of this is an xts
+  portfolio_vol_components <- portfolio_vol_components() #%>% as_xts(date_col = date)
+  
+  highchart(type = "stock") %>% 
+   hc_title(text = "Volatility Contribution") %>%
+   hc_add_series(portfolio_vol_components[, 1], name = input$stock1) %>%
+   #hc_add_series(portfolio_vol_components[, input$stock2], name = input$stock2) %>%
+   #hc_add_series(portfolio_vol_components[, input$stock3], name = input$stock3)
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+})
+```
+
+
+Page 2
+===========================================
+
+Column
+-----------------------------------------------------------------------
+
+### Chart C
+
+```{r}
+
+returns_df <- reactive({
+  componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date)
+})
+
+portfolio_vol_components <- reactive({
+  returns_df <- as.data.frame(returns_df()) %>% mutate(date = ymd(date))
+  weights <- c(input$w1, input$w2, input$w3)
+  
+  port_components <- map_df(1:(nrow(returns_df)-input$window), my_interval_sd,
+                            returns_df = returns_df, weights = weights, window = input$window) %>% 
+    mutate(date = ymd(date)) %>%
+    select(date, everything()) %>%
+    as_xts(date_col = date)
+  # an xts comes out of this
+})
+
+
+renderDataTable({
+  portfolio <- portfolio_vol_components() %>% 
+    as_tibble(preserve_row_names = TRUE) %>% 
+    mutate(date = ymd(row.names)) %>% 
+    select(-row.names) %>% 
+    select(date, everything())
+})
+
+```
+
