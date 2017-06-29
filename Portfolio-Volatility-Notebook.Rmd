@@ -3,18 +3,30 @@ title: "R Notebook"
 resource_files:
 - function-folder/helpers.r
 output: html_notebook
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, message = FALSE}
 library(quantmod)
 library(tidyverse)
 library(PerformanceAnalytics)
-library(xts)
 library(tidyquant)
+<<<<<<< HEAD
 library(plotly)
+=======
+library(highcharter)
+library(scales)
+load('VolProjectPrices.RDat')
+>>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
 ```
 
-```{r}
+```{r, eval = FALSE}
+# ijs = small caps
+# ief = treasury bonds
+# efa = eafe msci
+# spy = sp500
+# eem = emerging markets
 
 symbols <- c("SPY","IJS")
 
@@ -25,10 +37,21 @@ prices <-
   reduce(merge) %>%
   `colnames<-`(symbols)
 
-# generate daily return series for funds
-returns <-na.omit(ROC(prices, 1, "continuous"))
 
+#save(prices, file = 'VolProjectPrices.RDat')
+```
+
+```{r}
+# generate daily return series for funds
+portfolioComponentReturns <-na.omit(ROC(prices, 1, "continuous"))
+```
+
+```{r, message = FALSE}
+
+# portfolio standard deviation
+# We first need to choose portfolio weights.
 # portfolio weights
+<<<<<<< HEAD
 w = c(0.5, 0.5)
 
 # Build covariance matrix
@@ -39,77 +62,174 @@ plot_ly(x = nms, y = nms, z = cov_matrix,
             key = cov_matrix, type = "heatmap", source = "heatplot") %>%
       layout(xaxis = list(title = ""), 
              yaxis = list(title = ""))
+=======
+
+w = c(0.25, 0.20, 0.15, 0.25, 0.10)
+
+# By hand first. 
+
+w_asset1 <- w[1]
+w_asset2 <- w[2]
+w_asset3 <- w[3]
+w_asset4 <- w[4]
+w_asset5 <- w[5]
+
+asset1 <- portfolioComponentReturns[, 1]
+asset2 <- portfolioComponentReturns[, 2]
+asset3 <- portfolioComponentReturns[, 3]
+asset4 <- portfolioComponentReturns[, 4]
+asset5 <- portfolioComponentReturns[, 5]
+
+sd_by_hand <- 
+  sqrt(
+  (w_asset1^2 * var(asset1)) + (w_asset2^2 * var(asset2)) + (w_asset3^2 * var(asset3)) +
+  (w_asset4^2 * var(asset4)) + (w_asset5^2 * var(asset5)) + 
+  (2 * w_asset1 * w_asset2 * cov(asset1, asset2)) +  
+  (2 * w_asset1 * w_asset3 * cov(asset1, asset3)) +
+  (2 * w_asset1 * w_asset4 * cov(asset1, asset4)) +
+  (2 * w_asset1 * w_asset5 * cov(asset1, asset5)) +
+  (2 * w_asset2 * w_asset3 * cov(asset2, asset3)) +
+  (2 * w_asset2 * w_asset4 * cov(asset2, asset4)) +
+  (2 * w_asset2 * w_asset5 * cov(asset2, asset5)) +
+  (2 * w_asset3 * w_asset4 * cov(asset3, asset4)) +
+  (2 * w_asset3 * w_asset5 * cov(asset3, asset5)) +
+  (2 * w_asset4 * w_asset5 * cov(asset4, asset5))
+  )
+>>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
 ```
 
 ```{r}
 
-# portfolio standard deviation
-# transpose of the weights cross prod covariance matrix returns cross prod weights
-portfolio_sd <- sqrt(t(w) %*% cov_matrix %*% w)
+# Now we'll use matrix algebra
 
-# marginal contribution to portfolio standard deviation.
-marginal_contr_portfolio_sd <- w %*% cov(returns) / portfolio_sd[1,1]
+# Build covariance matrix. 
+covariance_matrix <- cov(portfolioComponentReturns)
 
-# component contribution to risk 
+# Transpose of the weights cross prod covariance matrix returns cross prod weights. 
+# If we wrote out the matrix multiplication, we could get the equation in the previous code chunk. 
+portfolio_sd <- sqrt(t(w) %*% covariance_matrix %*% w)
+```
+
+Now we want to break that portfolio volatility down into its constituent parts and investigate how each asset contributes to the portfolio vol. Why might we want to do that? 
+
+For our own risk management purposes, we might want to ensure that our risk hasn't got too concentrated in one asset. Not only might this lead a less diversified portfolio than we thought we had, but it also might indicate that our initial assumptions about a particular asset were wrong, or at least, they have become less right as the asset has changed over time. 
+
+Similarly, if this portfolio is governed by a mandate for, say, an institutional client, that client might have a preference or even a rule that no asset can rise above a certain threshold volatility contribution. 
+
+```{r}
+
+# Marginal contribution to portfolio standard deviation.
+# Take the cross product of the weights vector and the covariance matrix divided by the portfolio standard deviation. 
+marginal_contr_portfolio_sd <- w %*% covariance_matrix / portfolio_sd[1, 1]
+
+# Component contribution to risk 
 component_risk_contribution <- marginal_contr_portfolio_sd * w 
 
+components_summed <- rowSums(component_risk_contribution)
+components_summed
+portfolio_sd
 # To get the percentage contribution, divide component contribution by total sd.
-component_risk_percentage <- component_risk_contribution / portfolio_sd[1,1]
+component_risk_percentage <- component_risk_contribution / portfolio_sd[1, 1]
 
-results <- tibble(symbols, w, as.vector(component_risk_percentage)) %>% 
+component_risk_results <- tibble(symbols, w, as.vector(component_risk_percentage)) %>% 
   rename(weights = w, `risk contribution` = `as.vector(component_risk_percentage)`)
 
 
 ```
 
-```{r}
+```{r, warning = FALSE}
+
 # Confirm portfolio volatility
-portfolio_sd_confirm <- StdDev(returns, weights = w)
+portfolio_sd <- StdDev(portfolioComponentReturns, weights = w)
 
 # Confirm component contribution to volality.
-component_sd_confirm <- StdDev(returns, weights = w, portfolio_method = "component")
+component_sd <- StdDev(portfolioComponentReturns, weights = w, 
+                               portfolio_method = "component")
 
 # Returns a list, which isn't ideal for presenting. 
 str(component_sd_confirm)
 
-# Let's port to a tibble. I am going to transpose because I want them to be in 
-# wide format. That will be important when we want to chart later on - we'll get there! 
-sd_to_tibble <- as_tibble(t(sd_via_PerfAn$pct_contrib_StdDev)) %>% 
-    mutate(date = index(returns)[nrow(returns)]) %>% 
-    select(date, everything())
+# Let's port to a tibble.  
+contribution_tibble <- component_sd$contribution %>%
+  as_tibble(preserve_row_names = FALSE) %>%
+  mutate(asset = symbols) %>%
+  rename(`Vol Contribution` = value) %>% 
+  select(asset, everything())
+
+component_contribution_plot <- ggplot(contribution_tibble, aes(asset, `Vol Contribution`)) +
+  geom_col(fill = 'blue', colour = 'red') +# scale_y_continuous(labels = percent) + 
+  ggtitle("Contribution to Volatility", subtitle = "data from somewhere reliable")
+
+# Let's port to a tibble.  
+contribution_percent_tibble <- component_sd$pct_contrib_StdDev %>%
+  as_tibble(preserve_row_names = FALSE) %>%
+  mutate(asset = symbols) %>%
+  rename(`Vol Percent` = value) %>% 
+  select(asset, everything())
+
+component_percent_plot <- ggplot(contribution_percent_tibble, aes(asset, `Vol Percent`)) +
+  geom_col(fill = 'blue', colour = 'red') + scale_y_continuous(labels = percent) + 
+  ggtitle("Percent Contribution to Volatility", subtitle = "data from somewhere reliable")
+
+component_contribution_plot
+component_percent_plot
+
 ```
 
+Let's pause to look at that bar chart and realize how it can be misleading. Remember, this is the percentage contribution to the total vol. Since they are percentages, they have to sum to 100 %. But if the portfolio itself has very little volatility (as this one does), then those percentages might at first glance lead us to conclude that an asset has been volatile when it hasn't. For example, the largest contributor to the portfolio volatility has been EEM, an emerging market ETF. But have a look at the EEM chart and note that it's own volatility has been quite low. 
+
+```{r}
+EEM_sd <- StdDev(portfolioComponentReturns$EEM)
+
+EEM_sd_overtime <- rollapply(portfolioComponentReturns$EEM, 20, function(x) StdDev(x))
+
+highchart(type = "stock") %>%
+  hc_title(text = "EEM Volatility") %>%
+  hc_add_series(EEM_sd_overtime, name = "EEM Vol") %>%
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+EEM's standard deviation is `r EEM_sd` and it's chart shows a rolling standard deviation range of .005 to .011. 
+
+It doesn't seem to be a volatility history, yet it's our biggest contributor to portfolio volatility. A stable asset is our biggest contributor, and this indicates a stable portfolio. This is a roundabout way of suggesting that it's important to dig into these vol numbers and contextualize them within our portfolio.
 
 ```{r}
 # Before we get to substance, let's practice toggling between a tibble and an xts. 
-# Why? The more this is done, easier it will be to think through the tool kit for
-# time series. 
+# Why? Our financial data will frequently be imported as an xts object, 
+# but we'll want to wrangle, tidy and map functions to tibbles, before visualzing
+# with dygraphs or highcharter, which take an xts object. 
 
-returns_df <- returns %>% 
+returns_df <- portfolioComponentReturns %>% 
   as_tibble(preserve_row_names = TRUE) %>% 
   mutate(date = ymd(row.names)) %>% 
   select(-row.names) %>% 
   select(date, everything())
 
-# Another benefit, I can expirement with returns_xts without corrupting my
-# original data object `returns`.
 returns_xts <- returns_df %>% 
   as_xts(date_col = date)
 returns_xts[,"SPY"]
 ```
 
 ```{r SD Interval Function, message = FALSE}
-# calculate risk contribution to portfolio with function from PortfolioAnalytics package
+# calculate risk contribution to portfolio with function from PerformanceAnalytics package
 
+<<<<<<< HEAD
 my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
+=======
+my_interval_sd <- function(returns_df, start = 1, window = 20, weights){
+>>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
   
-  # First create start date
-  start_date = returns_df$date[start]
+  # First create start date. 
+  # For now let's always start at the first date for which we have data. 
+  start_date <- returns_df$date[start]
   
-  # Next an end date
-  end_date = returns_df$date[c(start + window)]
+  # Next an end date.
+  end_date <-  returns_df$date[c(start + window)]
   
-  # Filter on start and end date
+  # Filter on start and end date.
   interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
   
   # Convert to xts so can use built in Performance Analytics function.
@@ -129,6 +249,7 @@ my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
 ```
 
 ```{r Use the function, message = FALSE, warning = FALSE}
+<<<<<<< HEAD
 rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20)
 rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20)
 rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20)
@@ -145,9 +266,28 @@ weights <- w
 test <- map_df(1:(nrow(returns_df)-window), my_interval_sd, 
                returns_df = returns_df, weights = weights, window = window) %>%
   mutate_all(funs(round(., 3))) %>%
+=======
+rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20, weights = w)
+rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20, w)
+rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20, w)
+rolling_sd_test4 <- my_interval_sd(returns_df, 4, 20, w)
+rolling_sd_test5 <- my_interval_sd(returns_df, 5, 20, w)
+
+bound <- bind_rows(rolling_sd_test1, rolling_sd_test2, rolling_sd_test3, rolling_sd_test4, rolling_sd_test5)
+
+window <- 20 
+
+# We'll use map_df from the purr package to apply our interval function to the elements of the returns dataframe BUT we don't want to apply the function to the entire dataframe because it's on a rolling window. We want to start at element 1, look ahead by the lenghth of the window, and then apply the standard deviation function. Then move to element 2, and repeat.  That means that we need to stop applying the function at the time which is 20 observation before the last observation. If the window is 20 days, we need to stop at the last observation minus 20, or `nrow(returns_df) - window`. 
+
+rolling_vol_contributions <- 
+  map_df(1:(nrow(returns_df)-window), my_interval_sd, returns_df = returns_df, 
+         window = window, weights = w) %>%
+>>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
   mutate(date = ymd(date)) %>% 
-  select(date, everything()) %>% 
+  select(date, everything()) %>%
+  # Convert back to xts so we can use highcharter for visualizations.
   as_xts(date_col = date)
+<<<<<<< HEAD
 test
 ```
 
@@ -167,56 +307,88 @@ library(highcharter)
     hc_navigator(enabled = FALSE) %>% 
     hc_scrollbar(enabled = FALSE)
  vis
+=======
+
+rolling_vol_contributions
+
+
+>>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
+```
+
+Let's calculate total portfolio volatility on a rolling 20 day basis. 
+
+```{r}
+porf_returns_xts <- Return.portfolio(returns_xts, weights = w)
+porf_returns_xts
+portfolio_sd_overtime <- rollapply(porf_returns_xts, 
+                                   30, 
+                                   function(x) StdDev(x, portfolio_method = "single"))
+
+portfolio_sd_overtime
+```
+
+```{r}
+portfolio_vis <- highchart(type = "stock") %>%
+  hc_title(text = "Portfolio Volatility") %>%
+  hc_add_series(portfolio_sd_overtime, name = "Portfolio Vol") %>%
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+portfolio_vis  
+```
+
+
+```{r, message = FALSE}
+
+component_vis <- highchart(type = "stock") %>% 
+  hc_title(text = "Volatility Contribution") %>%
+  #hc_add_series(portfolio_sd_overtime, name = "portfolio") %>% 
+  hc_add_series(rolling_vol_contributions$SPY, name = "SPY Risk Comp", id = "SPY") %>%
+  hc_add_series(rolling_vol_contributions$IJS, name = "IJS Risk Comp") %>%
+  hc_add_series(rolling_vol_contributions$EFA, name = "EFA Risk Comp" )%>%
+  hc_add_series(rolling_vol_contributions$IEF, name = "IEF Risk Comp") %>%
+  hc_add_series(rolling_vol_contributions$EEM, name = "EEM Risk Comp") %>%
+  hc_add_series_flags(dates,
+                      title = c("E1"), 
+                      text = c("This is event 1"),
+                      id = "SPY") %>% 
+    # I don't like the look of the navigator/scrollbar, but you might. 
+    # Change these to enabled = TRUE and check out the results.
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+
+
+component_vis
+```
+
+Create a flag if a certain asset breaches 50% for example
+
+```{r}
+??hc_add_series_flags
+
+dates <- as.Date(c("2017-06-13"), format = "%Y-%m-%d")
+highchart(type = "stock") %>% 
+  hc_add_series_xts(usdjpy, id = "usdjpy") %>% 
+  hc_add_series_flags(dates,
+                      title = c("E1", "E2"), 
+                      text = c("This is event 1", "This is the event 2"),
+                      id = "usdjpy") 
 ```
 
 
 Applications: 
--subset. 
--rolling. 
 -subset by spikes, perhaps whenever x asset went above this threshold for risk contribution.
 -label any cross overs
 -try to explain when a certain goes above the thresh
 -calculate portfolio that puts to parity at time x
--chart the time series. 
+-compare to the Vix
+- compare to oil prices
+- compare to a random portfolio
+- compare to SP500 or a sector
 
 
-
-```{r}
-rolling_contribution <- function(returns_xts, window = 100){
-
-  rolling_window <- window
-  
-  w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
-
-  xts_window <- returns_xts[index(returns_xts)[1:rolling_window]] %>% 
-    StdDev(., weights = w, portfolio_method = "component")  
-  
-  xts_to_tibble <-  as_tibble(t(xts_window$pct_contrib_StdDev)) %>% 
-    mutate(`end date` = index(returns_xts)[rolling_window]) %>% 
-    select(`end date`, everything())
-}
-
-```
-
-
-```{r visualize volatility}
-
-#port.VaR <- VaR(returns, weights = w, portfolio_method = "component")
-
-test_df <- data_frame(names(port.sd$contribution)) %>% mutate(contribution = port.sd$contribution, perct_contr = port.sd$pct_contrib_StdDev)
-
-colnames(test_df)[1] <- "asset"
-
-per_an <- ggplot(test_df, aes(asset, contribution)) +
-  geom_col(fill = 'blue', colour = 'red')+ scale_y_continuous(labels = percent)
-
-library(scales)
-
-by_hand <-ggplot(results, aes(Tickers, Component)) +
-  geom_col(fill = 'blue', colour = 'red') + scale_y_continuous(labels = percent)
-per_an
-by_hand
-```
 
 
 
