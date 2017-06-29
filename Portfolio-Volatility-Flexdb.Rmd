@@ -5,6 +5,7 @@ output:
   flexdashboard::flex_dashboard:
     orientation: rows
     vertical_layout: fill
+    theme: united
 ---
 
 
@@ -13,7 +14,6 @@ library(flexdashboard)
 library(quantmod)
 library(tidyverse)
 library(PerformanceAnalytics)
-library(xts)
 library(tidyquant)
 library(DT)
 library(data.table)
@@ -198,7 +198,10 @@ renderDataTable({
     as_tibble(preserve_row_names = TRUE) %>% 
     mutate(date = ymd(row.names)) %>% 
     select(-row.names) %>% 
-    select(date, everything())
+    select(date, everything()) %>% 
+    datatable(., fillContainer = TRUE, extensions = 'Buttons', 
+            options = list(dom = 'Bfrtip', 
+                           buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
 })
 
 ```
