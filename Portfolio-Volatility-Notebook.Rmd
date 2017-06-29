@@ -1,5 +1,7 @@
 ---
 title: "R Notebook"
+resource_files:
+- function-folder/helpers.r
 output: html_notebook
 ---
 
@@ -9,12 +11,12 @@ library(tidyverse)
 library(PerformanceAnalytics)
 library(xts)
 library(tidyquant)
-library(purrr)
+library(plotly)
 ```
 
 ```{r}
 
-symbols <- c("SPY","IJS","EFA","EEM","IEF")
+symbols <- c("SPY","IJS")
 
 prices <- 
   getSymbols(symbols, src = 'google', from = "2017-01-01", 
@@ -27,11 +29,19 @@ prices <-
 returns <-na.omit(ROC(prices, 1, "continuous"))
 
 # portfolio weights
-w = c(0.25, 0.20, 0.15, 0.15, 0.25)
+w = c(0.5, 0.5)
 
 # Build covariance matrix
 cov_matrix <- cov(returns)
+correlation_matrix <- cor(returns)
+nms <- names(cov_matrix)
+plot_ly(x = nms, y = nms, z = cov_matrix, 
+            key = cov_matrix, type = "heatmap", source = "heatplot") %>%
+      layout(xaxis = list(title = ""), 
+             yaxis = list(title = ""))
+```
 
+```{r}
 
 # portfolio standard deviation
 # transpose of the weights cross prod covariance matrix returns cross prod weights
@@ -85,12 +95,13 @@ returns_df <- returns %>%
 # original data object `returns`.
 returns_xts <- returns_df %>% 
   as_xts(date_col = date)
+returns_xts[,"SPY"]
 ```
 
 ```{r SD Interval Function, message = FALSE}
 # calculate risk contribution to portfolio with function from PortfolioAnalytics package
 
-my_interval_sd <- function(returns_df, start = 1, window = 20){
+my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
   
   # First create start date
   start_date = returns_df$date[start]
@@ -105,7 +116,7 @@ my_interval_sd <- function(returns_df, start = 1, window = 20){
   returns_xts <- interval_to_use %>% as_xts(date_col = date) 
   
   # Portfolio weights.
-  w <- c(0.25, 0.20, 0.15, 0.15, 0.25)
+  w <- weights
   
   # Pass xts object to function.
   results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "component")
@@ -117,7 +128,7 @@ my_interval_sd <- function(returns_df, start = 1, window = 20){
 }
 ```
 
-```{r Use the function, message = FALSE}
+```{r Use the function, message = FALSE, warning = FALSE}
 rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20)
 rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20)
 rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20)
@@ -126,14 +137,18 @@ rolling_sd_test5 <- my_interval_sd(returns_df, 5, 20)
 
 bound <- bind_rows(rolling_sd_test1, rolling_sd_test2, rolling_sd_test3, rolling_sd_test4, rolling_sd_test5)
 
+# need an input for
+# window, weights, stocks
 window <- 20
+weights <- w
 
 test <- map_df(1:(nrow(returns_df)-window), my_interval_sd, 
-               returns_df = returns_df, window = window) %>% 
+               returns_df = returns_df, weights = weights, window = window) %>%
+  mutate_all(funs(round(., 3))) %>%
   mutate(date = ymd(date)) %>% 
   select(date, everything()) %>% 
   as_xts(date_col = date)
-
+test
 ```
 
 
@@ -142,7 +157,7 @@ library(highcharter)
 
  vis <- highchart(type = "stock") %>% 
    hc_title(text = "Volatility Contribution") %>%
-   hc_add_series(test$SPY, name = "SPY Risk Comp") %>%
+   hc_add_series(test[, 1], name = "SPY Risk Comp") %>%
    hc_add_series(test$IJS, name = "IJS Risk Comp") %>%
    hc_add_series(test$EFA, name = "EFA Risk Comp" )%>%
    hc_add_series(test$IEF, name = "IEF Risk Comp") %>%

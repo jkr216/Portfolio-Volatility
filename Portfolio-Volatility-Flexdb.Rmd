@@ -4,69 +4,20 @@ runtime: shiny
 output: 
   flexdashboard::flex_dashboard:
     orientation: rows
-    vertical_layout: fill
 ---
 
 
 ```{r setup, include=FALSE}
 library(flexdashboard)
-library(quantmod)
+#library(quantmod)
 library(tidyverse)
 library(PerformanceAnalytics)
-library(xts)
 library(tidyquant)
 library(DT)
 library(data.table)
 library(highcharter)
 
-# functions to be used downstream
-
-componentReturns_df <- function(stock1, stock2, stock3, start_date = "2017-01-01"){
-  
-  symbols <- c(stock1, stock2, stock3)
-  
-  prices <- 
-  getSymbols(symbols, src = 'google', from = start_date, 
-             auto.assign = TRUE, warnings = FALSE) %>% 
-  map(~Cl(get(.))) %>% 
-  reduce(merge) %>%
-  `colnames<-`(symbols)
-
-  # generate daily return series for funds
-  returns <-na.omit(ROC(prices, 1, "continuous"))
-  
-  returns_df <- returns %>% 
-  as_tibble(preserve_row_names = TRUE) %>% 
-  mutate(date = ymd(row.names)) %>% 
-  select(-row.names) %>% 
-  select(date, everything())
-}
-
-my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
-  
-  # First create start date
-  start_date = returns_df$date[start]
-  
-  # Next an end date
-  end_date = returns_df$date[c(start + window)]
-  
-  # Filter on start and end date
-  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
-  
-  # Convert to xts so can use built in Performance Analytics function.
-  returns_xts <- interval_to_use %>% as_xts(date_col = date) 
-  
-  # Portfolio weights.
-  w <- weights
-  
-  # Pass xts object to function.
-  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "component")
-  
-  # Convert results to tibble.
-  results_to_tibble <- as_tibble(t(results_as_xts$pct_contrib_StdDev)) %>% 
-    mutate(date = ymd(end_date)) %>% 
-    select(date, everything()) 
-}
+source("function-folder/helpers.r")
 ```
 
 ```{r, eval = FALSE}
@@ -131,7 +82,8 @@ portfolio_vol_components <- reactive({
   weights <- c(input$w1, input$w2, input$w3)
   
   port_components <- map_df(1:(nrow(returns_df)-input$window), my_interval_sd,
-                            returns_df = returns_df, weights = weights, window = input$window) %>% 
+                            returns_df = returns_df, weights = weights, window = input$window) %>%
+    mutate_all(funs(round(., 3))) %>% 
     mutate(date = ymd(date)) %>%
     select(date, everything()) %>%
     as_xts(date_col = date)
@@ -151,13 +103,13 @@ Column
 renderHighchart({
 
   # The output of this is an xts
-  portfolio_vol_components <- portfolio_vol_components() #%>% as_xts(date_col = date)
+  portfolio_vol_components <- portfolio_vol_components()
   
   highchart(type = "stock") %>% 
    hc_title(text = "Volatility Contribution") %>%
    hc_add_series(portfolio_vol_components[, 1], name = input$stock1) %>%
-   #hc_add_series(portfolio_vol_components[, input$stock2], name = input$stock2) %>%
-   #hc_add_series(portfolio_vol_components[, input$stock3], name = input$stock3)
+   hc_add_series(portfolio_vol_components[, 2], name = input$stock2) %>%
+   hc_add_series(portfolio_vol_components[, 3], name = input$stock3) %>% 
     # I don't like the look of the navigator/scrollbar, but you might. 
     # Change these to enabled = TRUE and check out the results.
     hc_navigator(enabled = FALSE) %>% 
@@ -176,30 +128,25 @@ Column
 
 ```{r}
 
-returns_df <- reactive({
-  componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date)
-})
-
-portfolio_vol_components <- reactive({
-  returns_df <- as.data.frame(returns_df()) %>% mutate(date = ymd(date))
-  weights <- c(input$w1, input$w2, input$w3)
-  
-  port_components <- map_df(1:(nrow(returns_df)-input$window), my_interval_sd,
-                            returns_df = returns_df, weights = weights, window = input$window) %>% 
-    mutate(date = ymd(date)) %>%
-    select(date, everything()) %>%
-    as_xts(date_col = date)
-  # an xts comes out of this
-})
-
-
 renderDataTable({
   portfolio <- portfolio_vol_components() %>% 
     as_tibble(preserve_row_names = TRUE) %>% 
     mutate(date = ymd(row.names)) %>% 
     select(-row.names) %>% 
-    select(date, everything())
+    select(date, everything()) %>% 
+    datatable(., fillContainer = TRUE, extensions = 'Buttons', 
+            options = list(dom = 'Bfrtip', 
+                           buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
 })
 
 ```
+
+### chart sum
+
+```{r}
+renderText({
+  summy(1, 2)
+})
+```
+
 
