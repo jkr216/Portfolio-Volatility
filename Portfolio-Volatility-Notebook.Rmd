@@ -1,7 +1,5 @@
 ---
 title: "R Notebook"
-resource_files:
-- function-folder/helpers.r
 output: html_notebook
 editor_options: 
   chunk_output_type: inline
@@ -12,13 +10,9 @@ library(quantmod)
 library(tidyverse)
 library(PerformanceAnalytics)
 library(tidyquant)
-<<<<<<< HEAD
-library(plotly)
-=======
 library(highcharter)
 library(scales)
 load('VolProjectPrices.RDat')
->>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
 ```
 
 ```{r, eval = FALSE}
@@ -28,7 +22,7 @@ load('VolProjectPrices.RDat')
 # spy = sp500
 # eem = emerging markets
 
-symbols <- c("SPY","IJS")
+symbols <- c("SPY","IJS","EFA","EEM","IEF")
 
 prices <- 
   getSymbols(symbols, src = 'google', from = "2017-01-01", 
@@ -51,18 +45,6 @@ portfolioComponentReturns <-na.omit(ROC(prices, 1, "continuous"))
 # portfolio standard deviation
 # We first need to choose portfolio weights.
 # portfolio weights
-<<<<<<< HEAD
-w = c(0.5, 0.5)
-
-# Build covariance matrix
-cov_matrix <- cov(returns)
-correlation_matrix <- cor(returns)
-nms <- names(cov_matrix)
-plot_ly(x = nms, y = nms, z = cov_matrix, 
-            key = cov_matrix, type = "heatmap", source = "heatplot") %>%
-      layout(xaxis = list(title = ""), 
-             yaxis = list(title = ""))
-=======
 
 w = c(0.25, 0.20, 0.15, 0.25, 0.10)
 
@@ -95,7 +77,6 @@ sd_by_hand <-
   (2 * w_asset3 * w_asset5 * cov(asset3, asset5)) +
   (2 * w_asset4 * w_asset5 * cov(asset4, asset5))
   )
->>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
 ```
 
 ```{r}
@@ -107,8 +88,12 @@ covariance_matrix <- cov(portfolioComponentReturns)
 
 # Transpose of the weights cross prod covariance matrix returns cross prod weights. 
 # If we wrote out the matrix multiplication, we could get the equation in the previous code chunk. 
-portfolio_sd <- sqrt(t(w) %*% covariance_matrix %*% w)
+sd_matrix_algebra <- sqrt(t(w) %*% covariance_matrix %*% w)
+
+sd_matrix_algebra
 ```
+
+The by hand calculation is `r sd_by_hand` and using matrix algebra we get `r sd_matrix_algebra`
 
 Now we want to break that portfolio volatility down into its constituent parts and investigate how each asset contributes to the portfolio vol. Why might we want to do that? 
 
@@ -155,7 +140,9 @@ contribution_tibble <- component_sd$contribution %>%
   mutate(asset = symbols) %>%
   rename(`Vol Contribution` = value) %>% 
   select(asset, everything())
+```
 
+```{r}
 component_contribution_plot <- ggplot(contribution_tibble, aes(asset, `Vol Contribution`)) +
   geom_col(fill = 'blue', colour = 'red') +# scale_y_continuous(labels = percent) + 
   ggtitle("Contribution to Volatility", subtitle = "data from somewhere reliable")
@@ -210,17 +197,12 @@ returns_df <- portfolioComponentReturns %>%
 
 returns_xts <- returns_df %>% 
   as_xts(date_col = date)
-returns_xts[,"SPY"]
 ```
 
 ```{r SD Interval Function, message = FALSE}
 # calculate risk contribution to portfolio with function from PerformanceAnalytics package
 
-<<<<<<< HEAD
-my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
-=======
 my_interval_sd <- function(returns_df, start = 1, window = 20, weights){
->>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
   
   # First create start date. 
   # For now let's always start at the first date for which we have data. 
@@ -249,24 +231,6 @@ my_interval_sd <- function(returns_df, start = 1, window = 20, weights){
 ```
 
 ```{r Use the function, message = FALSE, warning = FALSE}
-<<<<<<< HEAD
-rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20)
-rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20)
-rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20)
-rolling_sd_test4 <- my_interval_sd(returns_df, 4, 20)
-rolling_sd_test5 <- my_interval_sd(returns_df, 5, 20)
-
-bound <- bind_rows(rolling_sd_test1, rolling_sd_test2, rolling_sd_test3, rolling_sd_test4, rolling_sd_test5)
-
-# need an input for
-# window, weights, stocks
-window <- 20
-weights <- w
-
-test <- map_df(1:(nrow(returns_df)-window), my_interval_sd, 
-               returns_df = returns_df, weights = weights, window = window) %>%
-  mutate_all(funs(round(., 3))) %>%
-=======
 rolling_sd_test1 <- my_interval_sd(returns_df, 1, 20, weights = w)
 rolling_sd_test2 <- my_interval_sd(returns_df, 2, 20, w)
 rolling_sd_test3 <- my_interval_sd(returns_df, 3, 20, w)
@@ -282,37 +246,14 @@ window <- 20
 rolling_vol_contributions <- 
   map_df(1:(nrow(returns_df)-window), my_interval_sd, returns_df = returns_df, 
          window = window, weights = w) %>%
->>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
   mutate(date = ymd(date)) %>% 
   select(date, everything()) %>%
   # Convert back to xts so we can use highcharter for visualizations.
   as_xts(date_col = date)
-<<<<<<< HEAD
-test
-```
-
-
-```{r, message = FALSE}
-library(highcharter)
-
- vis <- highchart(type = "stock") %>% 
-   hc_title(text = "Volatility Contribution") %>%
-   hc_add_series(test[, 1], name = "SPY Risk Comp") %>%
-   hc_add_series(test$IJS, name = "IJS Risk Comp") %>%
-   hc_add_series(test$EFA, name = "EFA Risk Comp" )%>%
-   hc_add_series(test$IEF, name = "IEF Risk Comp") %>%
-   hc_add_series(test$EEM, name = "EEM Risk Comp") %>%
-    # I don't like the look of the navigator/scrollbar, but you might. 
-    # Change these to enabled = TRUE and check out the results.
-    hc_navigator(enabled = FALSE) %>% 
-    hc_scrollbar(enabled = FALSE)
- vis
-=======
 
 rolling_vol_contributions
 
 
->>>>>>> e632001a1760983414cdf1bedcdd06d15a87c5da
 ```
 
 Let's calculate total portfolio volatility on a rolling 20 day basis. 
