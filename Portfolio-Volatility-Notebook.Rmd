@@ -88,8 +88,12 @@ covariance_matrix <- cov(portfolioComponentReturns)
 
 # Transpose of the weights cross prod covariance matrix returns cross prod weights. 
 # If we wrote out the matrix multiplication, we could get the equation in the previous code chunk. 
-portfolio_sd <- sqrt(t(w) %*% covariance_matrix %*% w)
+sd_matrix_algebra <- sqrt(t(w) %*% covariance_matrix %*% w)
+
+sd_matrix_algebra
 ```
+
+The by hand calculation is `r sd_by_hand` and using matrix algebra we get `r sd_matrix_algebra`
 
 Now we want to break that portfolio volatility down into its constituent parts and investigate how each asset contributes to the portfolio vol. Why might we want to do that? 
 
@@ -136,7 +140,9 @@ contribution_tibble <- component_sd$contribution %>%
   mutate(asset = symbols) %>%
   rename(`Vol Contribution` = value) %>% 
   select(asset, everything())
+```
 
+```{r}
 component_contribution_plot <- ggplot(contribution_tibble, aes(asset, `Vol Contribution`)) +
   geom_col(fill = 'blue', colour = 'red') +# scale_y_continuous(labels = percent) + 
   ggtitle("Contribution to Volatility", subtitle = "data from somewhere reliable")
