@@ -12,17 +12,51 @@ library(PerformanceAnalytics)
 library(tidyquant)
 library(highcharter)
 library(scales)
-load('VolProjectPrices.RDat')
+#load('VolProjectPrices.RDat')
 ```
 
+This is the beginning of a three-part series on volatility. For those youngsters who have only been following markets since 2010, sometimes equity prices actually move down, not just for a day or two, but for months and months at a time.
+
+It's a lot more fun to ~~fantasize~~ think about returns which is why television shows and websites constantly update the daily market returns and give them snazzy green and red colors. Just once I would love to turn on CNBC and see a daily report on standard deviations - but that's (one of the many reasons) why I stare at an IDE all day instead of running a television network. 
+
+
+- volatility is really important. more so than returns? I think so, but feel free to disagree.  
+- we're gonna do some grunt work, if it feels tedious, I won't be offended but this is a big part of portfolio theory. Doing pushups is tedious too and if you hate them to the point of exclusion, boxing might not be the career for you. 
+- relatedly, if you're unsure, see if this kind of thing appeals to you. it's tedious, but i got a little jolt of excitement when the handwritten stuff worked. 
+-i'll touch on this in another post as well, but good for answering, is data science my thing? I've seen a lot of linkedin-y stuff from hiring managers about how they sort out who's a good data scientist, but that skips a huge question for everyone else: do you even want to do this? 
+- substantive benefits: confirm the models. 
+- good for new team members - as a way of saying, here's how our org thinks about volatility and standard deviation. This is a template, put in your own models. Maybe your teamfocus on [semi-variance]() (a topic we'll cover when get to the Sortino Ratio in the fall - can't wait!). 
+-reusable template when we want to extend to n assets
+
+
+1. Part 1: simple volatility
+  + by hand, by matrix, built in
+  + chart portfolio sd over time - will have to roll apply
+  + shiny app to let play with and see how it changes
+2. Part 2: asset contributions
+  + calculate by hand and with built in
+  + bar graph
+  + shiny app to see how it changes when build different portfolios? 
+3. Part 3: the final app and notebook
+  + portfolio build weights and assets
+  + calculate sd simple
+  + sd of the assets over time
+  + contribution to portfolio over time
+  + chart against port sd over time
+  + flag if anything reaches above a certain portion
+  + find minimum variance portfolio weights
+
+* general chance to comment on shiny app lab concept
+  + ok
 ```{r, eval = FALSE}
 # ijs = small caps
 # ief = treasury bonds
 # efa = eafe msci
 # spy = sp500
 # eem = emerging markets
+# Agg = global bonds
 
-symbols <- c("SPY","IJS","EFA","EEM","IEF")
+symbols <- c("SPY","IJS","EFA","EEM","AGG")
 
 prices <- 
   getSymbols(symbols, src = 'google', from = "2017-01-01", 
@@ -93,7 +127,27 @@ sd_matrix_algebra <- sqrt(t(w) %*% covariance_matrix %*% w)
 sd_matrix_algebra
 ```
 
-The by hand calculation is `r sd_by_hand` and using matrix algebra we get `r sd_matrix_algebra`
+The by hand calculation is `r sd_by_hand` and using matrix algebra we get `r sd_matrix_algebra`. 
+
+And, finally, we can use the build `StdDev` function from the `PerformanceAnalytics` package. 
+
+```{r}
+# Confirm portfolio volatility
+portfolio_sd <- StdDev(portfolioComponentReturns, weights = w)
+```
+
+We now have: 
+
+- by-hand calculation = `r sd_by_hand`
+- matrix algebra calculation = `r sd_matrix_algebra`
+- build in function calculation = `r portfolio_sd`
+
+That was quite a lot of work to confirm that 3 calculations are equal to each other but there are a few benefits. First, as our work gets more complicated and we build custom functions, we'll want to the use the built-in `StdDev` function and we now have supreme confidence in its accuracy. That's nice, but even more important is now that we have the template above, we can reuse it for other portfolios and our future self + other colleagues can quickly reproduce our results using whichever method they prefer. 
+
+Here we have calculated the standard deviation of returns for a 5 asset portfolio but in industry we're likely to have many more assets to handle. This template should save a lot of future work time when we wish to generalize to n assets.
+
+Furthemore, 
+
 
 Now we want to break that portfolio volatility down into its constituent parts and investigate how each asset contributes to the portfolio vol. Why might we want to do that? 
 
@@ -105,41 +159,48 @@ Similarly, if this portfolio is governed by a mandate for, say, an institutional
 
 # Marginal contribution to portfolio standard deviation.
 # Take the cross product of the weights vector and the covariance matrix divided by the portfolio standard deviation. 
-marginal_contr_portfolio_sd <- w %*% covariance_matrix / portfolio_sd[1, 1]
+marginal_contr_portfolio_sd <- w %*% covariance_matrix / sd_matrix_algebra[1, 1]
 
 # Component contribution to risk 
 component_risk_contribution <- marginal_contr_portfolio_sd * w 
 
 components_summed <- rowSums(component_risk_contribution)
-components_summed
-portfolio_sd
+```
+
+The summed components are `r components_summed` and the matrix calculation is `r sd_matrix_algebra`.
+
+
+```{r}
 # To get the percentage contribution, divide component contribution by total sd.
-component_risk_percentage <- component_risk_contribution / portfolio_sd[1, 1]
+component_risk_percentage <- component_risk_contribution / sd_matrix_algebra[1, 1]
 
 component_risk_results <- tibble(symbols, w, as.vector(component_risk_percentage)) %>% 
   rename(weights = w, `risk contribution` = `as.vector(component_risk_percentage)`)
 
-
+component_risk_results
 ```
 
 ```{r, warning = FALSE}
-
-# Confirm portfolio volatility
-portfolio_sd <- StdDev(portfolioComponentReturns, weights = w)
 
 # Confirm component contribution to volality.
 component_sd <- StdDev(portfolioComponentReturns, weights = w, 
                                portfolio_method = "component")
 
 # Returns a list, which isn't ideal for presenting. 
-str(component_sd_confirm)
+str(component_sd)
+```
 
+There's nothing wrong with a list, but it's not ideal for presenting results. Let's move it to a `tibble`.
+
+```{r}
 # Let's port to a tibble.  
 contribution_tibble <- component_sd$contribution %>%
   as_tibble(preserve_row_names = FALSE) %>%
   mutate(asset = symbols) %>%
   rename(`Vol Contribution` = value) %>% 
   select(asset, everything())
+
+contribution_tibble
 ```
 
 ```{r}
@@ -283,6 +344,7 @@ portfolio_vis
 
 ```{r, message = FALSE}
 
+dates <- as.Date(c("2017-06-13"), format = "%Y-%m-%d")
 component_vis <- highchart(type = "stock") %>% 
   hc_title(text = "Volatility Contribution") %>%
   #hc_add_series(portfolio_sd_overtime, name = "portfolio") %>% 
@@ -306,17 +368,6 @@ component_vis
 
 Create a flag if a certain asset breaches 50% for example
 
-```{r}
-??hc_add_series_flags
-
-dates <- as.Date(c("2017-06-13"), format = "%Y-%m-%d")
-highchart(type = "stock") %>% 
-  hc_add_series_xts(usdjpy, id = "usdjpy") %>% 
-  hc_add_series_flags(dates,
-                      title = c("E1", "E2"), 
-                      text = c("This is event 1", "This is the event 2"),
-                      id = "usdjpy") 
-```
 
 
 Applications: 
