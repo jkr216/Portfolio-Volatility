@@ -1,0 +1,11 @@
+name: Portfolio-Volatility-Notebook
+title: Portfolio-Volatility-Notebook
+account: jonathan
+server: colorado.rstudio.com
+appId: 551
+bundleId: 1152
+url: http://colorado.rstudio.com:3939/content/551/
+when: 1497890222.8819
+asMultiple: FALSE
+asStatic: FALSE
+additionalFiles: function-folder/helpers.r
