@@ -36,14 +36,11 @@ It's a lot more fun to ~~fantasize~~ think about returns which is why television
 2. Part 2: asset contributions
   + calculate by hand and with built in
   + bar graph
-  + shiny app to see how it changes when build different portfolios? 
-3. Part 3: the final app and notebook
-  + portfolio build weights and assets
-  + calculate sd simple
-  + sd of the assets over time
+  + shiny app to see how it changes when build different portfolios
   + contribution to portfolio over time
   + chart against port sd over time
   + flag if anything reaches above a certain portion
+3. Part 3: minimun variance portfolio, 
   + find minimum variance portfolio weights
 
 * general chance to comment on shiny app lab concept
@@ -65,13 +62,8 @@ prices <-
   reduce(merge) %>%
   `colnames<-`(symbols)
 
-
-#save(prices, file = 'VolProjectPrices.RDat')
-```
-
-```{r}
-# generate daily return series for funds
-portfolioComponentReturns <-na.omit(ROC(prices, 1, "continuous"))
+#portfolioComponentReturns <- na.omit(ROC(prices, 1, "continuous"))
+portfolioComponentReturns <- na.omit(Return.calculate(prices, method = "log"))
 ```
 
 ```{r, message = FALSE}
@@ -111,11 +103,16 @@ sd_by_hand <-
   (2 * w_asset3 * w_asset5 * cov(asset3, asset5)) +
   (2 * w_asset4 * w_asset5 * cov(asset4, asset5))
   )
+
 ```
 
-```{r}
+Okay, writing that out by hand was painful but at least we won't be forgetting that equation any time soon. Our result is `r sd_by_hand`.  
 
-# Now we'll use matrix algebra
+Now let's turn to the less verbose matrix algebra path and confirm that we get the same result. 
+
+We will build a covariance matrix of returns, then take the square root of: the transpose of the weights vector x the covariance matrix x the weights vector. To perform matrix multiplcation, use `%*%`. 
+
+```{r}
 
 # Build covariance matrix. 
 covariance_matrix <- cov(portfolioComponentReturns)
@@ -124,12 +121,10 @@ covariance_matrix <- cov(portfolioComponentReturns)
 # If we wrote out the matrix multiplication, we could get the equation in the previous code chunk. 
 sd_matrix_algebra <- sqrt(t(w) %*% covariance_matrix %*% w)
 
-sd_matrix_algebra
 ```
 
-The by hand calculation is `r sd_by_hand` and using matrix algebra we get `r sd_matrix_algebra`. 
-
-And, finally, we can use the build `StdDev` function from the `PerformanceAnalytics` package. 
+The by-hand calculation is `r sd_by_hand` and the matrix algebra calculation is `r sd_matrix_algebra`. Thanksfully, these return the same result so we don't have to sort through the by-hand equation again. 
+And, finally, we can use the built-in `StdDev` function from the `PerformanceAnalytics` package. 
 
 ```{r}
 # Confirm portfolio volatility
@@ -142,7 +137,11 @@ We now have:
 - matrix algebra calculation = `r sd_matrix_algebra`
 - build in function calculation = `r portfolio_sd`
 
-That was quite a lot of work to confirm that 3 calculations are equal to each other but there are a few benefits. First, as our work gets more complicated and we build custom functions, we'll want to the use the built-in `StdDev` function and we now have supreme confidence in its accuracy. That's nice, but even more important is now that we have the template above, we can reuse it for other portfolios and our future self + other colleagues can quickly reproduce our results using whichever method they prefer. 
+That was quite a lot of work to confirm that 3 calculations are equal to each other but there are a few benefits. 
+
+First, as our work gets more complicated and we build custom functions, we'll want to the use the built-in `StdDev` function and we now have supreme confidence in its accuracy. That's nice, but even more important is now that we have the template above, we can reuse it for other portfolios. 
+
+ur future self + other colleagues can quickly reproduce our results using whichever method they prefer. 
 
 Here we have calculated the standard deviation of returns for a 5 asset portfolio but in industry we're likely to have many more assets to handle. This template should save a lot of future work time when we wish to generalize to n assets.
 
@@ -317,9 +316,12 @@ rolling_vol_contributions
 
 ```
 
+
+
 Let's calculate total portfolio volatility on a rolling 20 day basis. 
 
 ```{r}
+
 porf_returns_xts <- Return.portfolio(returns_xts, weights = w)
 porf_returns_xts
 portfolio_sd_overtime <- rollapply(porf_returns_xts, 
