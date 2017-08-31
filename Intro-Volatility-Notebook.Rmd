@@ -99,6 +99,11 @@ portfolio_component_monthly_returns_xts <-
 
 head(portfolio_component_monthly_returns_xts)
 
+
+prices_monthly <- to.monthly(prices, OHLC = FALSE)
+portfolio_component_monthly_returns_xts <- na.omit(ROC(prices_monthly, 1, type = "continuous"))
+index(portfolio_component_monthly_returns_xts) <- as.Date(as.yearmon(index(portfolio_component_monthly_returns_xts), format = '%Y%m'))
+
 ```
 
 Take a quick look at the monthly returns above, to make sure things appear to be in order. 

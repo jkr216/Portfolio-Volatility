@@ -1,0 +1,88 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(Quandl)
+ff_monthly <- Quandl("KFRENCH/FACTORS_M", order = "asc") 
+ff_daily <- Quandl("KFRENCH/FACTORS_D", order = "asc")
+Quandl.api_key("d9EidiiDWoFESfdk5nPy")
+save(ff_daily, ff_monthly, file = "fama-french.RDat")
+
+
+ff <- ff %>% select(-5)
+# Extract Fama-French Factors and Fund Returns
+rmrf <- ff[,2]/100
+smb <- ff[,3]/100
+hml <- ff[,4]/100
+rf <- ff[,5]/100
+
+# now add a column for fund returns start date = 
+start_date <- ff$Date[1]
+
+symbol <- ('FMAGX')
+
+getSymbols("MAGX", src = 'google', from = "2006-01-01", 
+             auto.assign = TRUE, warnings = FALSE)
+
+close_prices <- Cl(get(.)))
+  
+`colnames<-`(symbol)
+
+prices_monthly <- to.monthly(prices, indexAt="lastof", OHLC = FALSE)
+portfolio_component_monthly_returns_xts <- na.omit(ROC(prices_monthly, 1, type = "continuous"))
+index(portfolio_component_monthly_returns_xts) <- as.Date(as.yearmon(index(portfolio_component_monthly_returns_xts), format = '%Y%m'))
+ 
+# Calculate Excess Returns for Target fund
+fund.xcess <- fund - rf
+ 
+# Run Fama-French Regression
+ffregression <- lm(fund.xcess ~ rmrf + smb + hml)
+
+mods <- by_cyl %>% map(~ lm(mpg ~ wt, data = .))
+
+mtcars %>%
+split(.$cyl) %>%
+map(~ lm(mpg ~ wt, data = .x)) %>%
+map(summary) %>%
+map_dbl("r.squared")
+ 
+# Print summary of regression results
+print(summary(ffregression))
+```
+
+```{r}
+# Fama-French Regression example in R
+library(broom)
+# Load CSV file into R
+ff_datatest <- read.table("ffdatatest.csv",header=TRUE,sep=";")
+# Extract Fama-French Factors and Fund Returns
+rmrf <- ff_datatest[,2]
+smb <- ff_datatest[,3]
+hml <- ff_datatest[,4]
+rmw <- ff_datatest[,5]
+cma <- ff_datatest[,6]
+rf <- ff_datatest[,7]
+# Run Fama-French Regression
+for(i in 8:32){
+fund <- ff_datatest[,i]
+fund.xcess <- fund - rf
+ffregression <- lm(fund.xcess ~ rmrf + smb + hml + rmw + cma)
+# Print summary of regression results
+tidy_ffregression <- tidy(ffregression)
+print(colnames(fund))
+print(tidy_ffregression)
+}
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).

@@ -1,0 +1,84 @@
+---
+title: "Component Vol Unparam"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(tidyquant)
+library(DT)
+library(data.table)
+library(highcharter)
+
+source("function-folder/helpers.r")
+```
+
+Volatility Report for Tech Stocks: GOOG + AMZN + FB
+=================================
+
+```{r, message = FALSE, warning = FALSE}
+# Let's pass parameters and get calculations
+  
+  returns_df <- 
+    componentReturns_df("GOOG", "AMZN", "FB",  "2016-01-01") %>% 
+    mutate(date = ymd(date))
+
+  weights <- c(.25, .25, .5)
+  
+  # calculate rolling portfolio sd
+  portfolio_rolling_sd <- 
+  map_df(1:(nrow(returns_df) - 6), rolling_portfolio_sd, 
+         returns_df = returns_df, window = 6, weights = weights) %>%
+  mutate(date = ymd(date)) %>% 
+  select(date, everything()) %>%
+  as_xts(date_col = date) %>% 
+  `colnames<-`("Rolling Port SD")
+  
+  # calculate rolling component contributions
+  portfolio_vol_components <-
+    map_df(1:(nrow(returns_df) - 6), 
+           my_interval_sd, returns_df = returns_df, 
+           weights = weights, window = 6) %>%
+    mutate_all(funs(round(., 3))) %>% 
+    mutate(date = ymd(date)) %>%
+    select(date, everything()) %>%
+    as_xts(date_col = date)
+  # an xts comes out of this
+```
+
+Row 1
+-----------------------------------------
+
+### Portfolio Rolling Volatility
+
+```{r, warning = FALSE}
+highchart(type = "stock") %>%
+  hc_title(text = "Portfolio Rolling Volatility") %>%
+  hc_add_series(portfolio_rolling_sd, name = "Portfolio Volatility", color = 'green') %>%
+  hc_add_theme(hc_theme_flatdark()) %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+Row 2
+----------------------------------------
+
+### Asset Contribution to Total Volatility
+
+```{r, warning= FALSE}
+  highchart(type = "stock") %>% 
+    hc_title(text = "Volatility Contribution by Asset") %>%
+    hc_add_series(portfolio_vol_components[, 1], name = names(portfolio_vol_components[, 1])) %>%
+    hc_add_series(portfolio_vol_components[, 2], name = names(portfolio_vol_components[, 2])) %>%
+    hc_add_series(portfolio_vol_components[, 3], name = names(portfolio_vol_components[, 3])) %>%
+    hc_add_theme(hc_theme_flatdark()) %>%
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+
+```
+
+

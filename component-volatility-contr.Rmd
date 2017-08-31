@@ -1,0 +1,173 @@
+---
+title: "Component Volatility Contribution"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, message = FALSE}
+library(tidyverse)
+library(tidyquant)
+library(highcharter)
+
+```
+
+
+From last time, we need 5 assets' price histories and returns, and we need to select their weights in the portfolio. 
+
+```{r, message=FALSE, warning=FALSE}
+# ijs = small caps
+# ief = treasury bonds
+# efa = eafe msci
+# spy = sp500
+# eem = emerging markets
+# Agg = global bonds
+
+symbols <- c("SPY","IJS","EFA","EEM","AGG")
+
+prices <- 
+  getSymbols(symbols, src = 'google', from = "2017-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`(symbols)
+
+#portfolioComponentReturns <- na.omit(ROC(prices, 1, "continuous"))
+portfolioComponentReturns <- na.omit(Return.calculate(prices, method = "log"))
+
+# portfolio weights
+
+w = c(0.25, 0.20, 0.15, 0.25, 0.10)
+```
+
+To calculate 
+
+```{r, message = FALSE}
+# We first need to build covariance matrix. 
+covariance_matrix <- cov(portfolioComponentReturns)
+
+# Transpose of the weights cross prod covariance matrix returns cross prod weights. 
+# will give us portfolio standard deviation. 
+sd_portfolio <- sqrt(t(w) %*% covariance_matrix %*% w)
+```
+
+
+In a previous post, we painstakingly calculated portfolio standard deviation (or volatility)
+
+Now we want to break that portfolio volatility down into its constituent parts and investigate how each asset contributes to the portfolio vol. Why might we want to do that? 
+
+For our own risk management purposes, we might want to ensure that our risk hasn't got too concentrated in one asset. Not only might this lead a less diversified portfolio than we thought we had, but it also might indicate that our initial assumptions about a particular asset were wrong, or at least, they have become less right as the asset has changed over time. 
+
+Similarly, if this portfolio is governed by a mandate from, say, an institutional client, that client might have a preference or even a rule that no asset or sector can rise above a certain threshold volatility contribution. That institutional client might require a report like this from each of their outsourced managers, so they can sum the constituents. 
+
+The percentage contribution of each asset is defined as:
+(marginal contribution of asset i * weight of asset i) / portfolio standard deviation
+
+Let's find the marginal contribution first. To do so, take the cross product of the weights vector and the covariance matrix divided by the portfolio standard deviation.
+
+```{r}
+
+# Marginal contribution of each asset. 
+marginal_contribution <- w %*% covariance_matrix / sd_portfolio[1, 1]
+```
+
+Now multiply marginal contribution of each asset by the weights vector to get total contribution. We can then sum the asset contributions and make sure it's equal to total portfolio standard deviation.
+
+
+```{r}
+# Component contributions to risk are the weighted marginal contributions
+component_contribution <- marginal_contribution * w 
+
+# This should equal total portfolio vol, or the object `sd_portfolio`
+components_summed <- rowSums(component_contribution)
+```
+
+The summed components are `r components_summed` and the matrix calculation is `r sd_portfolio`.
+
+To get to percentages, we divide each asset's contribution by total portfolio standard deviation.
+
+```{r}
+# To get the percentage contribution, divide component contribution by total sd.
+component_percentages <- component_risk_contribution / sd_portfolio[1, 1]
+```
+
+Let's port this to a tibble for ease of presentation, and we'll name the object `by_hand` because we did the calculations step-by-step.
+
+```{r}
+percentage_tibble_by_hand <- 
+  tibble(symbols, w, as.vector(component_percentages)) %>% 
+  rename(asset = symbols, weights = w, contribution = `as.vector(component_percentages)`)
+
+percentage_tibble_by_hand
+```
+
+As you might have guessed, we used `by_hand` in the object name because we could have used a pre-built R function to do all this work.
+The `StdDev` function from PerformanceAnalytics will run this same calculation if we  pass in the weights and set `portfolio_method = "component"` (recall that if we set `portfolio_method = "single"`, the function will return the total portfolio standard deviation, as we saw in [our previous work]()).
+
+Let's confirm that the pre-built function returns the same results.
+
+```{r, warning = FALSE}
+
+# Confirm component contribution to volality.
+component_sd_pre_built <- StdDev(portfolioComponentReturns, weights = w, 
+                              portfolio_method = "component")
+component_sd_pre_built
+```
+
+That function returns a list and one of the elements is `$pct_contrib_StdDev`, which is the percentage contribution of each asset. Let's move it to a `tibble` for ease of presentation.
+
+```{r}
+# Let's port to a tibble.  
+percentages_tibble_pre_built <- 
+  component_sd_pre_built$pct_contrib_StdDev %>%
+  as_tibble(preserve_row_names = FALSE) %>%
+  mutate(asset = symbols) %>%
+  rename(contribution = value) %>% 
+  select(asset, everything())
+```
+
+Has our work checked out? Is `percentages_tibble_pre_built` showing the same result as `component_percentages_tibble_by_hand`? 
+
+Compare the two objects
+
+```{r, message=FALSE}
+percentages_tibble_pre_built
+percentage_tibble_by_hand
+```
+
+Huzzah - things seem to be consistent! 
+
+
+```{r}
+component_percent_plot <- 
+  ggplot(percentage_tibble_by_hand, aes(asset, contribution)) +
+  geom_col(fill = 'blue', colour = 'red') + 
+  scale_y_continuous(labels = scales::percent) + 
+  ggtitle("Percent Contribution to Volatility", 
+          subtitle = "useful subtitle") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5))
+
+component_percent_plot
+
+```
+
+Let's pause to look at that bar chart and realize what it is telling us and what it's not telling us.  It looks like AGG, a bond fund, has done a good job as a volatility dampener.
+
+The largest contributor to the portfolio volatility has been EEM, an emerging market ETF, but have a look at the EEM chart and note that it's own absolute volatility has been quite low. 
+
+```{r}
+EEM_sd <- StdDev(portfolioComponentReturns$EEM)
+
+EEM_sd_overtime <- rollapply(portfolioComponentReturns$EEM, 20, function(x) StdDev(x))
+
+highchart(type = "stock") %>%
+  hc_title(text = "EEM Volatility") %>%
+  hc_add_series(EEM_sd_overtime, name = "EEM Vol") %>%
+  hc_navigator(enabled = FALSE) %>% 
+  hc_scrollbar(enabled = FALSE)
+```
+
+EEM has contributed 30% to this portfolio, but it hasn't been a risky asset over this time period. The percentages have to sum to 100% but just because an asset has made a big contribution doesn't mean it's an inherently risky asset. 
+
+That's all for today. The next post will be about determining the rolling contribution of each asset and it's not for the faint of heart! 

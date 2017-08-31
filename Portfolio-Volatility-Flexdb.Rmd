@@ -1,10 +1,9 @@
 ---
-title: "Portfolio Volatility App"
+title: "Port Vol Shiny App"
 runtime: shiny
 output: 
   flexdashboard::flex_dashboard:
     orientation: rows
-    vertical_layout: fill
     theme: spacelab
 ---
 
@@ -19,11 +18,9 @@ library(highcharter)
 
 source("function-folder/helpers.r")
 
-# functions to be used downstream
-
 ```
 
-Page 1
+Volatility
 ===========================================
 
 Sidebar {.sidebar}
@@ -56,15 +53,12 @@ fluidRow(
 
 fluidRow(
   column(7,
-  dateInput("start_date", "Start Date", value = "2017-01-01")),
+  dateInput("start_date", "Start Date", value = "2013-01-01")),
   column(5,
-  numericInput("window", "Window", 10, min = 5, max = 50, step = 5))
+  numericInput("window", "Window", 10, min = 3, max = 50, step = 5))
 )
 
-
-actionButton("go", "Go")
-
-
+actionButton("go", "Submit")
 
 ```
 
@@ -74,10 +68,9 @@ portfolio_vol_components <- eventReactive(input$go, {
   
   returns_df <- 
     componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date) %>% 
-    as.data.frame(returns_df()) %>% 
     mutate(date = ymd(date))
   
-  weights <- c(input$w1, input$w2, input$w3)
+  weights <- c(input$w1/100, input$w2/100, input$w3/100)
   
   port_components <- 
     map_df(1:(nrow(returns_df)-input$window), 
@@ -89,12 +82,53 @@ portfolio_vol_components <- eventReactive(input$go, {
     as_xts(date_col = date)
   # an xts comes out of this
 })
+
+portfolio_rolling_sd <- eventReactive(input$go, { 
+  
+  returns_df <- 
+    componentReturns_df(input$stock1, input$stock2, input$stock3, input$start_date) %>% 
+    mutate(date = ymd(date))
+  
+  weights <- c(input$w1, input$w2, input$w3)
+  
+  portfolio_rolling_sd <- 
+    map_df(1:(nrow(returns_df) - input$window), rolling_portfolio_sd, 
+           returns_df = returns_df, window = input$window, weights = weights) %>%
+    mutate(date = ymd(date)) %>%
+    select(date, everything()) %>%
+    as_xts(date_col = date) %>% 
+    `colnames<-`("Rolling Port SD")
+})
+
+window_label <- reactive({input$window})
 ```
 
-Column
------------------------------------------------------------------------
+Row 1
+-----------------------------------------
 
-### Chart B
+### Portfolio Rolling Volatility
+
+
+```{r}
+
+renderHighchart({
+
+  # The output of this is an xts
+  portfolio_rolling_sd <- portfolio_rolling_sd()
+  
+  highchart(type = "stock") %>% 
+    hc_title(text = "Portfolio Volatility ") %>%
+    hc_add_series(portfolio_rolling_sd, name = names(portfolio_rolling_sd)) %>%
+    hc_add_theme(hc_theme_flatdark()) %>%
+    hc_navigator(enabled = FALSE) %>% 
+    hc_scrollbar(enabled = FALSE)
+})
+```
+
+Row 2
+-----------------------------------
+
+### Asset Contribution to Total Volatility
 
 ```{r}
 
@@ -105,38 +139,36 @@ renderHighchart({
   portfolio_vol_components <- portfolio_vol_components()
   
   highchart(type = "stock") %>% 
-   hc_title(text = "Volatility Contribution") %>%
-   hc_add_series(portfolio_vol_components[, 1], name = names(portfolio_vol_components[, 1])) %>%
-   hc_add_series(portfolio_vol_components[, 2], name = names(portfolio_vol_components[, 2])) %>%
-   hc_add_series(portfolio_vol_components[, 3], name = names(portfolio_vol_components[, 3])) %>%
-   hc_add_theme(hc_theme_flatdark()) %>%   
-    # I don't like the look of the navigator/scrollbar, but you might. 
-    # Change these to enabled = TRUE and check out the results.
+    hc_title(text = "Volatility Contribution") %>%
+    hc_add_series(portfolio_vol_components[, 1], name = names(portfolio_vol_components[, 1])) %>%
+    hc_add_series(portfolio_vol_components[, 2], name = names(portfolio_vol_components[, 2])) %>%
+    hc_add_series(portfolio_vol_components[, 3], name = names(portfolio_vol_components[, 3])) %>%
+    hc_add_theme(hc_theme_flatdark()) %>%
     hc_navigator(enabled = FALSE) %>% 
     hc_scrollbar(enabled = FALSE)
 })
 ```
 
 
-Page 2
+
+Data/Download
 ===========================================
 
 Column
 -----------------------------------------------------------------------
 
-### Chart C
+### Raw Vol Data
 
 ```{r}
 
-renderDataTable({
+renderDataTable(server = FALSE, {
   
   portfolio <- portfolio_vol_components() %>% 
     as_tibble(preserve_row_names = TRUE) %>% 
-    mutate(date = ymd(row.names), date2 =  ymd(row.names), 
-           date3 =  ymd(row.names), date4 =  ymd(row.names)) %>% 
+    mutate(date = ymd(row.names)) %>% 
     select(-row.names) %>% 
     select(date, everything()) %>% 
-    datatable(.,
+    datatable(., 
               fillContainer = TRUE, 
               extensions = 'Buttons', 
               options = list(dom = 'Bfrtip',
@@ -145,5 +177,6 @@ renderDataTable({
 })
 
 ```
+
 
 

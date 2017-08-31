@@ -25,6 +25,10 @@ prices_monthly <- to.monthly(prices, OHLC = FALSE)
 portfolio_component_monthly_returns_xts <- na.omit(ROC(prices_monthly, 1, type = "continuous"))
 index(portfolio_component_monthly_returns_xts) <- as.Date(as.yearmon(index(portfolio_component_monthly_returns_xts), format = '%Y%m'))
 
+spy_returns <- portfolio_component_monthly_returns_xts$SPY
+
+weights <- c(0.10, 0.10, 0.20, 0.40, 0.20)
+
 ```
 
 This is the second post in our series on portfolio volatility, variance and standard deviation. 
