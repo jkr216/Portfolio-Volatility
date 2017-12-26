@@ -6,13 +6,9 @@ editor_options:
 ---
 
 ```{r setup, message = FALSE}
-library(quantmod)
 library(tidyverse)
-library(PerformanceAnalytics)
 library(tidyquant)
 library(highcharter)
-library(scales)
-#load('VolProjectPrices.RDat')
 ```
 
 This is the beginning of a three-part series on volatility. For those youngsters who have only been following markets since 2010, sometimes equity prices actually move down, not just for a day or two, but for months and months at a time.
@@ -74,7 +70,7 @@ save(portfolioComponentReturns, file = "port_comp.RDat")
 # We first need to choose portfolio weights.
 # portfolio weights
 
-w = c(0.25, 0.20, 0.15, 0.25, 0.10)
+w = c(0.25, 0.20, 0.20, 0.25, 0.10)
 
 # By hand first. 
 
@@ -147,22 +143,25 @@ ur future self + other colleagues can quickly reproduce our results using whiche
 
 Here we have calculated the standard deviation of returns for a 5 asset portfolio but in industry we're likely to have many more assets to handle. This template should save a lot of future work time when we wish to generalize to n assets.
 
-Furthemore, 
-
+In a previous post, we painstakingly calculated portfolio standard deviation (or volatility)
 
 Now we want to break that portfolio volatility down into its constituent parts and investigate how each asset contributes to the portfolio vol. Why might we want to do that? 
 
 For our own risk management purposes, we might want to ensure that our risk hasn't got too concentrated in one asset. Not only might this lead a less diversified portfolio than we thought we had, but it also might indicate that our initial assumptions about a particular asset were wrong, or at least, they have become less right as the asset has changed over time. 
 
-Similarly, if this portfolio is governed by a mandate for, say, an institutional client, that client might have a preference or even a rule that no asset can rise above a certain threshold volatility contribution. 
+Similarly, if this portfolio is governed by a mandate from, say, an institutional client, that client might have a preference or even a rule that no asset or sector can rise above a certain threshold volatility contribution. That institutional client might require a report like this from each of their outsourced managers, so they can sum the constituents. 
 
 ```{r}
 
 # Marginal contribution to portfolio standard deviation.
 # Take the cross product of the weights vector and the covariance matrix divided by the portfolio standard deviation. 
+# portfolio sd = the sum of the product of the weights times the marginal
+# contribution of each asset. 
+# Here, we know portfolio_sd and the weights. 
+# we'll use matrix algebra to find the MC_i of each asset.
 marginal_contr_portfolio_sd <- w %*% covariance_matrix / sd_matrix_algebra[1, 1]
 
-# Component contribution to risk 
+# Component contribution to risk are the weighted marginal contributions
 component_risk_contribution <- marginal_contr_portfolio_sd * w 
 
 components_summed <- rowSums(component_risk_contribution)
@@ -205,19 +204,26 @@ contribution_tibble
 ```
 
 ```{r}
-component_contribution_plot <- ggplot(contribution_tibble, aes(asset, `Vol Contribution`)) +
-  geom_col(fill = 'blue', colour = 'red') +# scale_y_continuous(labels = percent) + 
+component_contribution_plot <- 
+  ggplot(contribution_tibble, aes(asset, `Vol Contribution`)) +
+  geom_col(fill = 'blue', colour = 'red') +
+  scale_y_continuous(labels = function(x){ paste0(x, "%") }, 
+                     breaks = scales::pretty_breaks(n=10)) 
   ggtitle("Contribution to Volatility", subtitle = "data from somewhere reliable")
 
 # Let's port to a tibble.  
-contribution_percent_tibble <- component_sd$pct_contrib_StdDev %>%
+contribution_percent_tibble <- 
+  component_sd$pct_contrib_StdDev %>%
   as_tibble(preserve_row_names = FALSE) %>%
   mutate(asset = symbols) %>%
   rename(`Vol Percent` = value) %>% 
   select(asset, everything())
 
-component_percent_plot <- ggplot(contribution_percent_tibble, aes(asset, `Vol Percent`)) +
-  geom_col(fill = 'blue', colour = 'red') + scale_y_continuous(labels = percent) + 
+component_percent_plot <- 
+  ggplot(contribution_percent_tibble, aes(asset, `Vol Percent`)) +
+  geom_col(fill = 'blue', colour = 'red') + 
+  scale_y_continuous(labels = function(x){ paste0(x, "%") }, 
+                     breaks = scales::pretty_breaks(n=10)) + 
   ggtitle("Percent Contribution to Volatility", subtitle = "data from somewhere reliable")
 
 component_contribution_plot
@@ -243,7 +249,7 @@ highchart(type = "stock") %>%
 
 EEM's standard deviation is `r EEM_sd` and it's chart shows a rolling standard deviation range of .005 to .011. 
 
-It doesn't seem to be a volatility history, yet it's our biggest contributor to portfolio volatility. A stable asset is our biggest contributor, and this indicates a stable portfolio. This is a roundabout way of suggesting that it's important to dig into these vol numbers and contextualize them within our portfolio.
+It doesn't seem to be a volatile history, yet it's our biggest contributor to portfolio volatility. A stable asset is our biggest contributor, and this indicates a stable portfolio. This is a roundabout way of suggesting that it's important to dig into these vol numbers and contextualize them within our portfolio.
 
 ```{r}
 # Before we get to substance, let's practice toggling between a tibble and an xts. 
@@ -371,7 +377,6 @@ component_vis
 ```
 
 Create a flag if a certain asset breaches 50% for example
-
 
 
 Applications: 
