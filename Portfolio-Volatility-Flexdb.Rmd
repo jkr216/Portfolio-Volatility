@@ -4,11 +4,11 @@ runtime: shiny
 output: 
   flexdashboard::flex_dashboard:
     orientation: rows
+    source_code: embed
 ---
 
 
 ```{r setup, include=FALSE}
-
 library(tidyverse)
 library(tidyquant)
 library(DT)
@@ -23,38 +23,49 @@ source("function-folder/helpers.r")
 Volatility
 ===========================================
 
-Sidebar {.sidebar}
+Build Portfolio {.sidebar}
 -----------------------------------------------------------------------
+
+
+```{css}
+.navbar{
+  background-color:#2c3e50
+}
+
+#section-sidebar {
+ background-color:#2c3e50
+}
+```
 
 ```{r}
 
 helpText("Choose assets and weights.")
 
 fluidRow(
-  column(7,
+  column(6,
   textInput("stock1", "Stock 1", "GOOG")),
-  column(5,
+  column(4,
   numericInput("w1", "Portf. %", 25, min = 1, max = 100))
 )  
 
 fluidRow(
-  column(7,
+  column(6,
   textInput("stock2", "Stock 2", "FB")),
-  column(5,
+  column(4,
   numericInput("w2", "Portf. %", 25, min = 1, max = 100))
 )
 
 fluidRow(
-  column(7,
+  column(6,
   textInput("stock3", "Stock 3", "AMZN")),
-  column(5,
+  column(4,
   numericInput("w3", "Portf. %", 50, min = 1, max = 100))
 )
 
 fluidRow(
-  column(7,
+  column(6,
   dateInput("start_date", "Start Date", value = "2013-01-01")),
-  column(5,
+  column(4,
   numericInput("window", "Window", 10, min = 3, max = 50, step = 5))
 )
 
@@ -122,7 +133,8 @@ renderHighchart({
     hc_add_theme(hc_theme_flat()) %>%
     hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
     hc_navigator(enabled = FALSE) %>% 
-    hc_scrollbar(enabled = FALSE)
+    hc_scrollbar(enabled = FALSE) %>% 
+    hc_exporting(enabled = TRUE)
 })
 ```
 
@@ -150,38 +162,12 @@ renderHighchart({
     hc_add_theme(hc_theme_flat()) %>%
     hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
     hc_navigator(enabled = FALSE) %>% 
-    hc_scrollbar(enabled = FALSE)
+    hc_scrollbar(enabled = FALSE) %>% 
+    hc_exporting(enabled = TRUE)
 })
 ```
 
 
-
-Data/Download
-===========================================
-
-Column
------------------------------------------------------------------------
-
-### Raw Vol Data
-
-```{r}
-
-renderDataTable(server = FALSE, {
-  
-  portfolio <- portfolio_vol_components() %>% 
-    tk_tbl(preserve_index  = TRUE) %>% 
-    mutate(date = ymd(index)) %>% 
-    select(-index) %>% 
-    select(date, everything()) %>% 
-    datatable(., 
-              fillContainer = TRUE, 
-              extensions = 'Buttons', 
-              options = list(dom = 'Bfrtip',
-                             buttons = c('copy', 'csv', 'excel'), 
-                             scrollX = TRUE))
-})
-
-```
 
 
 

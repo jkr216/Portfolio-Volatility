@@ -50,25 +50,30 @@ First, though, why do we care about rolling standard deviations when in our prev
 
 Imagine a portfolio which had a standard deviation of returns for each 6-month period of 3% and it never changed. Now imagine a portfolio whose vol fluctuated every few 6-month periods from 0% to 6% . We might find a 3% standard deviation of monthly returns over a 10-year sample for both of these, but those two portfolios are not exhibiting the same volatility. The rolling volatility of each would show us the differences and then we could hypothesize about the past causes and future probabilities for those differences. We might also want to think about dynamically rebalancing our portfolio to better manage volatility if we are seeing large spikes in the rolling windows. We'll look more into rebalancing as this series progresses.
 
-For now, let's load the `.RDat` file saved from our previous Notebook. 
+```{r import prices and calculate returns, warning = FALSE, message = FALSE}
+symbols <- c("SPY","IJS","EFA","EEM","AGG")
 
-```{r, eval = FALSE}
-load('portfolio-returns.RDat')
+prices <- 
+  getSymbols(symbols, src = 'google', from = "2013-01-01", 
+             auto.assign = TRUE, warnings = FALSE) %>% 
+  map(~Cl(get(.))) %>%
+  reduce(merge) %>% 
+  `colnames<-`(symbols)
+
+prices_monthly <- to.monthly(prices, indexAt = "first", OHLC = FALSE)
+
+portfolioComponentReturns <- na.omit(Return.calculate(prices_monthly, method = "log"))
+
+w <- c(0.25, 0.20, 0.20, 0.25, 0.10)
 ```
-
-We now have 3 objects in our Global Environment: 
-
-    + `spy_returns` - an `xts` object of SPY monthly returns
-    + `portfolio_component_monthly_returns_xts` - an `xts` object of returns of the 5 funds in our portfolio
-    + `weights` - a vector of portfolio weights
 
 Our least difficult task is calculating the rolling standard deviation of SPY returns. We  use `rollapply` for this and just need to choose a number of months for the rolling window. 
 
 ```{r}
 window <- 6
 
-spy_rolling_sd <- na.omit(rollapply(spy_returns$SPY, window, 
-                           function(x) StdDev(x)))
+spy_rolling_sd <- round(na.omit(rollapply(portfolioComponentReturns$SPY, window, 
+                           function(x) StdDev(x))), 4) * 100
 ```
 
 We now have an `xts` object called `spy_rolling_sd` that contains the 6-month rolling standard deviation of returns of SPY.  Keep in mind that the chosen window is important and can affect the results quite a bit. Soon we'll wrap this work to a Shiny app where changing the window and visualizing the results will be easier. 
@@ -108,7 +113,7 @@ Here's the logic I used to construct that function (feel free to eviscerate this
 7. Convert it back to a `tibble` and return.
 8. We now have the standard deviation of returns for the 6-month period that started on the first date, because we default to `start = 1`. If we wanted to get the standard deviation for a 6-month period that started on the second date, we could set `start = 2`, etc.
 
-```{r}
+```{r Rolling Portfolio Vol Function}
 rolling_portfolio_sd <- function(returns_df, start = 1, window = 6, weights){
  
   start_date <- returns_df$date[start]
@@ -130,12 +135,11 @@ rolling_portfolio_sd <- function(returns_df, start = 1, window = 6, weights){
 }
 ```
 
-We're halfway there, though, because we need to apply that function starting at the first date in our `portfolio_component_monthly_returns_df` object, and keep applying it to successive date indexes until the date that is 6 months before the final date. Why end there? Because there is no rolling 6-month standard deviation that starts only 1, 2, 3, 4 or 5 months ago! 
+We're only halfway there, though, because we need to apply that function starting at the first date in our `portfolio_component_monthly_returns_df` object, and keep applying it to successive date indexes until the date that is 6 months before the final date. Why end there? Because there is no rolling 6-month standard deviation that starts only 1, 2, 3, 4 or 5 months ago! 
 
-We will invoke `map_df()` to apply our function to date 1, then save the result to a `data.frame`, then apply our function to date 2, and save to that same `data.frame`, and so on until we tell it stop at the ate index that is 6 before the last date index. 
+We will invoke `map_df()` to apply our function to date 1, then save the result to a `data.frame`, then apply our function to date 2, and save to that same `data.frame`, and so on until we tell it stop at the at index that is 6 before the last date index. 
 
 ```{r Use Function}
-window <- 6
 
 roll_portfolio_result <-
   map_df(1:(nrow(portfolio_component_monthly_returns_df) - window), rolling_portfolio_sd, 

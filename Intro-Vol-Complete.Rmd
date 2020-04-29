@@ -59,7 +59,7 @@ Let's import prices and save them to an `xts` object.
 ```{r import prices and calculate returns, warning = FALSE, message = FALSE}
 
 # A vector of symbol for our ETFs.
-symbols <- sort(c("SPY","VGT","EFA","DBC","AGG"))
+symbols <- c("SPY","VGT","EFA","DBC","AGG")
 
 # Pipe them to getSymbols, extract the closing prices and merge to one xts object. 
 # Take a look at result before moving on to calculate the returns.

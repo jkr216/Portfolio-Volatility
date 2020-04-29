@@ -264,7 +264,7 @@ returns_df <- portfolioComponentReturns %>%
   select(date, everything())
 
 returns_xts <- returns_df %>% 
-  as_xts(date_col = date)
+  tk_xts(date_var = date)
 ```
 
 ```{r SD Interval Function, message = FALSE}

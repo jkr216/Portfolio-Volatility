@@ -1,0 +1,82 @@
+---
+title: "R for Reproducible Finance" 
+subtitle: ""
+author: "Jonathan Regenstein"
+date: "September 9, 2017"
+output: pdf_document
+---
+
+## Summary
+
+Why do robo-advisors like Betterment and Wealthfront cost a fraction of the price of traditional money managers? Why can one credit agency rate debt in 30 days but it takes another 6 months? How is Blackrock doing away with human stock-picking in favor of machine learning? Those firms have embraced the principles of modern data science and they can do things faster, cheaper and smarter. Their advantage is growing every day and many financial institutions are frantically working to be the leader, or to catch up to the leader, in this brave new world.
+
+*Reproducible Finance* explains how to build a great data science practice in the world of finance and compete in this modern financial jungle. The foundational hypothesis is that the world of finance is changing, embracing data science and technology, but there's no roadmap for how to do that.  It's unnatural to finance, which is not a business that attracts or fosters scientific thinking.  
+
+R code is important, and the bulk of this book is dedicated to writing that R code. However, the reason this book is not called *R Code in Finance* is that *Reproducible Finance* will frequently emphasize reproducibility, reusability, lean processes, experimentation and other best practices that relate to but go beyond writing code.
+
+By book's end, a managing director at a bank or hedge fund will have the technical foundation and cultural mindset to begin building a data science team that delivers an advantage over slower moving firms. Readers will gain an edge on the competition through the use of data science.
+
+It's important to note that this book will involve a substantial web presence at reproduciblefinance.com. Most of the coding examples conclude by building an interactive Shiny web application, and those will be hosted at the homepage, along with any data and author blog posts. In that sense, *Reproducible Finance* is more of a dynamic R-based project than a traditional book about R. 
+
+## Why me and why now?
+
+At RStudio, I work with dozens of financial services organizations - investment banks, commercial banks, hedge funds, investment managers, central banks - on various aspects of bringing data science to finance. I have seen wildly successful efforts and frighteningly unsuccessful forays. This book attempts to codify and illustrate the best practices.
+
+
+## Intended Audience and Why They'll Read It
+
+The intended audience are leaders at financial institutions who want to build data science practices, analysts at financial institutions who want to work on data science teams, students/aspiring professionals who want work in finance today, tomorrow, or in 5 years and anyone who has foreseen that Excel skills are not enough to be competitive in finance. All of these groups want to modernize, embrace fintech and gain an edge. This book offers them one way to do so.
+
+
+# Chapters
+
+A few of these have already appeared as blog posts originally published on RStudio's blog (rviews.rstudio.com/categories/reproducible-finance-with-r/) and cross-posted on the homepage (reproduciblefinance.com) that will be part of this project. 
+
+1. Volatility
+    + Intro Portfolio Volatility (reproduciblefinance.com/2017/07/12/introduction-to-volatility/)
+    + Rolling Volatility (reproduciblefinance.com/2017/07/18/introduction-to-rolling-volatility/)
+    + Visualizing Volatility (reproduciblefinance.com/2017/07/21/visualizing-portfolio-volatility/)
+    +  Shiny App (reproduciblefinance.com/2017/08/08/portfolio-volatility-shiny-app/)
+    + Portfolio Components and Volatility
+    + Shiny (done)
+    + Skew and Kurtosis (wednesday and thursday 9/14)
+    + Shiny (9/15 during travel and down time)
+    + ~25 pages
+2. Return (9/18)
+    + From Prices to Returns
+    + Portfolio Components and Returns
+    + Rebalancing 
+    + Shiny
+    + Monte Carlo Simulation
+    + Visualizing and Density Plots
+    + Shiny
+    + ~25 pages
+3. Portfolio Theory (9/25)
+    + Sharpe Ratio
+    + Sortino Ratio
+    + Shiny
+    + Mean Variance Optimization
+    + Efficient frontier/tangency portfolio
+    + Shiny
+    + ~25 pages
+4. Other Asset Classes
+    + Bonds
+    + Currencies
+    + Commodities
+    + ~15 pages
+5. Some Modeling (Oct 1)
+    + Capital asset pricing model
+    + Arbitrage pricing theory
+    + Fama French multifactor model
+    + ~15 pages
+6. Beyond Code (Oct. 8th)
+    + Culture
+    + People
+    + Alpha
+    + ~20 pages
+
+7. Conclusion
+
+
+Total Pages: 150-180 pages
+ 

@@ -6,21 +6,107 @@ output:
     source_code: embed
 ---
 
+
 ```{r setup, include=FALSE}
-library(flexdashboard)
 library(tidyverse)
 library(tidyquant)
-library(DT)
-library(data.table)
+library(timetk)
 library(highcharter)
 
-source("function-folder/helpers.r")
+
+# For the functions below, if you don't want to include them in this Rmd
+# file, you can put them in another file, called 'helpers.r' or whatever name
+# you choose, and then 'source' that file in the Rmd. That will allow you to
+# access any functions in that file. To test that out, I recommend to start with a simple
+# arithmetic equation like function(x, y){ x + y}, and then play with sourcing it.
+
+
+componentReturns_df <- function(stock1, stock2, stock3, start_date){
+  
+  symbols <- c(stock1, stock2, stock3)
+  
+  prices <- 
+    getSymbols(symbols, src = 'yahoo', from = start_date, 
+               auto.assign = TRUE, warnings = FALSE) %>% 
+    map(~Cl(get(.))) %>% 
+    reduce(merge) %>%
+    `colnames<-`(symbols)
+  
+  # generate return series for funds
+  prices_monthly <- to.monthly(prices, indexAt = "first", OHLC = FALSE)
+  #returns <- na.omit(ROC(prices_monthly, 1, type = "continuous"))
+  
+  #prices_monthly <- to.monthly(prices, indexAt = "first", OHLC = FALSE)
+  
+  returns <- na.omit(Return.calculate(prices_monthly, method = "log"))
+  
+  
+  returns_df <- returns %>% 
+    tk_tbl(preserve_index =  TRUE) %>% 
+    mutate(date = ymd(index)) %>% 
+    select(-index) %>% 
+    select(date, everything())
+}
+
+# Calculate rolling Portfolio Standard Deviation
+
+rolling_portfolio_sd <- function(returns_df, start = 1, window = 6, weights){
+  
+  start_date <- returns_df$date[start]
+  
+  end_date <-  returns_df$date[c(start + window)]
+  
+  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  returns_xts <- interval_to_use %>% tk_xts(date_var = date) 
+  
+  w <- weights
+  
+  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "single")
+  results_as_xts <- round(results_as_xts, 4)
+  
+  results_to_tibble <- tk_tbl(t(results_as_xts[,1])) %>% 
+    mutate(date = ymd(end_date)) %>% 
+    select(date, everything()) 
+  
+}
+
+# Calculate rolling portfolio component contributions to standard deviation.
+
+my_interval_sd <- function(returns_df, start = 1, weights, window = 20){
+  
+  # First create start date
+  start_date = returns_df$date[start]
+  
+  # Next an end date
+  end_date = returns_df$date[c(start + window)]
+  
+  # Filter on start and end date
+  interval_to_use <- returns_df %>% filter(date >= start_date & date < end_date)
+  
+  # Convert to xts so can use built in Performance Analytics function.
+  returns_xts <- interval_to_use %>% tk_xts(date_var = date) 
+  
+  # Portfolio weights.
+  w <- weights
+  
+  # Pass xts object to function.
+  results_as_xts <- StdDev(returns_xts, weights = w, portfolio_method = "component")
+  
+  # Convert results to tibble.
+  results_to_tibble <- tk_tbl(t(results_as_xts$pct_contrib_StdDev)) %>% 
+    mutate(date = ymd(end_date)) %>%
+    mutate_if(is.numeric, function(x) x * 100) %>% 
+    select(date, everything()) 
+}
+
+
 ```
 
 Volatility Report for Tech Stocks: GOOG + AMZN + FB
 =================================
 
-```{r, message = FALSE, warning = FALSE}
+```{r Calculate Returns, message = FALSE, warning = FALSE}
 # Let's pass parameters and get calculations
   
   returns_df <- 
@@ -35,7 +121,7 @@ Volatility Report for Tech Stocks: GOOG + AMZN + FB
          returns_df = returns_df, window = 6, weights = weights) %>%
   mutate(date = ymd(date)) %>% 
   select(date, everything()) %>%
-  as_xts(date_col = date) %>% 
+  tk_xts(date_var = date) %>% 
   `colnames<-`("Rolling Port SD")
   
   # calculate rolling component contributions
@@ -46,7 +132,7 @@ Volatility Report for Tech Stocks: GOOG + AMZN + FB
     mutate_all(funs(round(., 3))) %>% 
     mutate(date = ymd(date)) %>%
     select(date, everything()) %>%
-    as_xts(date_col = date)
+    tk_xts(date_var = date)
   # an xts comes out of this
 ```
 
@@ -55,11 +141,14 @@ Row 1
 
 ### Portfolio Rolling Volatility
 
+Something insightful
+
 ```{r, warning = FALSE}
 highchart(type = "stock") %>%
   hc_title(text = "Portfolio Rolling Volatility") %>%
   hc_add_series(portfolio_rolling_sd, name = "Portfolio Volatility", color = 'green') %>%
-  hc_add_theme(hc_theme_flatdark()) %>%
+  hc_add_theme(hc_theme_flat()) %>%
+  hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
   hc_navigator(enabled = FALSE) %>% 
   hc_scrollbar(enabled = FALSE)
 ```
@@ -72,10 +161,14 @@ Row 2
 ```{r, warning= FALSE}
   highchart(type = "stock") %>% 
     hc_title(text = "Volatility Contribution by Asset") %>%
-    hc_add_series(portfolio_vol_components[, 1], name = names(portfolio_vol_components[, 1])) %>%
-    hc_add_series(portfolio_vol_components[, 2], name = names(portfolio_vol_components[, 2])) %>%
-    hc_add_series(portfolio_vol_components[, 3], name = names(portfolio_vol_components[, 3])) %>%
-    hc_add_theme(hc_theme_flatdark()) %>%
+    hc_add_series(portfolio_vol_components[, 1], 
+                  name = names(portfolio_vol_components[, 1])) %>%
+    hc_add_series(portfolio_vol_components[, 2], 
+                  name = names(portfolio_vol_components[, 2])) %>%
+    hc_add_series(portfolio_vol_components[, 3], 
+                  name = names(portfolio_vol_components[, 3])) %>%
+    hc_add_theme(hc_theme_flat()) %>%
+    hc_yAxis(labels = list(format = "{value}%"), opposite = FALSE) %>%
     hc_navigator(enabled = FALSE) %>% 
     hc_scrollbar(enabled = FALSE)
 
